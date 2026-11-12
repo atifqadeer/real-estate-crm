@@ -43,7 +43,7 @@ class LeadFollowUpController extends Controller
         $lead->update(['next_follow_up_at' => $data['due_at']]);
         LeadActivity::create([
             'organization_id' => $organization->id, 'lead_id' => $lead->id, 'actor_id' => $request->user()->id,
-            'type' => 'follow_up_created', 'description' => 'Follow-up scheduled for ' . $data['due_at'] . ($data['note'] ? ": {$data['note']}" : ''),
+            'type' => 'follow_up_created', 'description' => 'Follow-up scheduled for ' . $data['due_at'] . (!empty($data['note']) ? ": {$data['note']}" : ''),
         ]);
         return response()->json(['data' => $followUp], 201);
     }

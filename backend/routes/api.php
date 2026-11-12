@@ -15,6 +15,12 @@ use App\Http\Controllers\Api\V1\LeadFormController;
 use App\Http\Controllers\Api\V1\LeadImportController;
 use App\Http\Controllers\Api\V1\MediaController;
 use App\Http\Controllers\Api\V1\MetaWebhookController;
+use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\PipelineController;
+use App\Http\Controllers\Api\V1\LeadSavedFilterController;
+use App\Http\Controllers\Api\V1\LeadTaskController;
+use App\Http\Controllers\Api\V1\WhatsAppController;
+use App\Http\Controllers\Api\V1\WhatsAppWebhookController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +37,9 @@ Route::prefix('v1')->group(function () {
     // Public website lead forms (Phase 4): honeypot + per-IP throttle inside.
     Route::get('/public/forms/{publicKey}', [LeadFormController::class, 'publicShow']);
     Route::post('/public/forms/{publicKey}/submit', [LeadFormController::class, 'publicSubmit'])->middleware('throttle:30,1');
+    // WhatsApp Cloud API webhooks (Phase 5): same handshake + signature scheme.
+    Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
+    Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'receive']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -112,6 +121,32 @@ Route::prefix('v1')->group(function () {
             Route::post('/organizations/{organization}/follow-ups', [LeadFollowUpController::class, 'store']);
             Route::post('/organizations/{organization}/follow-ups/{followUp}/complete', [LeadFollowUpController::class, 'complete']);
             Route::post('/organizations/{organization}/follow-ups/{followUp}/cancel', [LeadFollowUpController::class, 'cancel']);
+            // Phase 5: pipeline, saved filters, tasks, notifications
+            Route::get('/organizations/{organization}/pipeline', [PipelineController::class, 'board']);
+            Route::post('/organizations/{organization}/leads/{lead}/move', [PipelineController::class, 'move']);
+            Route::get('/organizations/{organization}/lead-filters', [LeadSavedFilterController::class, 'index']);
+            Route::post('/organizations/{organization}/lead-filters', [LeadSavedFilterController::class, 'store']);
+            Route::delete('/organizations/{organization}/lead-filters/{filter}', [LeadSavedFilterController::class, 'destroy']);
+            Route::get('/organizations/{organization}/tasks', [LeadTaskController::class, 'index']);
+            Route::post('/organizations/{organization}/tasks', [LeadTaskController::class, 'store']);
+            Route::put('/organizations/{organization}/tasks/{task}', [LeadTaskController::class, 'update']);
+            Route::delete('/organizations/{organization}/tasks/{task}', [LeadTaskController::class, 'destroy']);
+            Route::get('/organizations/{organization}/notifications', [NotificationController::class, 'index']);
+            Route::post('/organizations/{organization}/notifications/read-all', [NotificationController::class, 'markAllRead']);
+            Route::post('/organizations/{organization}/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+            Route::get('/organizations/{organization}/notification-preferences', [NotificationController::class, 'preferences']);
+            Route::put('/organizations/{organization}/notification-preferences', [NotificationController::class, 'updatePreferences']);
+            // Phase 5: WhatsApp
+            Route::get('/organizations/{organization}/whatsapp/accounts', [WhatsAppController::class, 'accounts']);
+            Route::post('/organizations/{organization}/whatsapp/accounts', [WhatsAppController::class, 'connect']);
+            Route::post('/organizations/{organization}/whatsapp/accounts/{account}/disconnect', [WhatsAppController::class, 'disconnect']);
+            Route::get('/organizations/{organization}/whatsapp/accounts/{account}/templates', [WhatsAppController::class, 'templates']);
+            Route::post('/organizations/{organization}/whatsapp/accounts/{account}/sync-templates', [WhatsAppController::class, 'syncTemplates']);
+            Route::get('/organizations/{organization}/whatsapp/conversations', [WhatsAppController::class, 'conversations']);
+            Route::get('/organizations/{organization}/whatsapp/conversations/{conversation}', [WhatsAppController::class, 'conversation']);
+            Route::post('/organizations/{organization}/whatsapp/conversations/start', [WhatsAppController::class, 'startForLead']);
+            Route::post('/organizations/{organization}/whatsapp/conversations/{conversation}/send-text', [WhatsAppController::class, 'sendText']);
+            Route::post('/organizations/{organization}/whatsapp/conversations/{conversation}/send-template', [WhatsAppController::class, 'sendTemplate']);
         });
     });
 });

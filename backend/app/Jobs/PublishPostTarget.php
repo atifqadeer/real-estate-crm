@@ -84,5 +84,30 @@ class PublishPostTarget implements ShouldQueue
         }
 
         $content->recalculatePostStatus($post->fresh());
+        $this->notifyIfTerminal($post->fresh());
+    }
+
+    /** Notify the author once when the post reaches a terminal status. */
+    private function notifyIfTerminal(\App\Models\ContentPost $post): void
+    {
+        $map = [
+            'published' => ['content.published', 'Post published: '],
+            'partially_published' => ['content.published', 'Post partially published: '],
+            'failed' => ['content.failed', 'Post FAILED to publish: '],
+        ];
+        if (!isset($map[$post->status])) return;
+        [$type, $prefix] = $map[$post->status];
+        $author = $post->author;
+        if (!$author || !$post->organization) return;
+        $exists = \App\Models\InAppNotification::where('organization_id', $post->organization_id)
+            ->where('user_id', $author->id)->where('type', $type)
+            ->where('data->post_id', $post->id)->exists();
+        if ($exists) return;
+        app(\App\Services\Notifications\NotificationService::class)->notify(
+            $post->organization, $author, $type,
+            $prefix . ($post->title ?? 'Untitled post'),
+            $post->status === 'failed' ? 'Open the post to see the per-destination errors and retry.' : null,
+            ['post_id' => $post->id]
+        );
     }
 }

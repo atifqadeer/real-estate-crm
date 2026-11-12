@@ -78,6 +78,11 @@ class SocialAccountController extends Controller
         $this->guardAccount($organization, $account);
         abort_unless($request->user()->can('social.test'), 403);
         $account = $connections->testAccount($account, $request->user());
+        if ($account->status === 'expired') {
+            $this->notifyAdmins($organization, 'social.token_expired',
+                "Social account token expired: {$account->display_name}",
+                'Reconnect the account to resume publishing and lead retrieval.');
+        }
         $account->load(['platform', 'token', 'permissions', 'connectedBy:id,name']);
         return response()->json(['data' => $this->payload($account)]);
     }
@@ -87,7 +92,17 @@ class SocialAccountController extends Controller
         $this->guardAccount($organization, $account);
         abort_unless($request->user()->can('social.disconnect'), 403);
         $connections->disconnect($account, $request->user());
+        $this->notifyAdmins($organization, 'social.disconnected',
+            "Social account disconnected: {$account->display_name}",
+            'Publishing and lead retrieval for this account have stopped.');
         return response()->json(['data' => ['message' => 'Account disconnected. Its stored token was deleted.']]);
+    }
+
+    private function notifyAdmins(Organization $organization, string $type, string $title, ?string $body): void
+    {
+        $service = app(\App\Services\Notifications\NotificationService::class);
+        $admins = $service->usersWithRoles($organization, ['client_owner', 'client_admin', 'agency_account_manager']);
+        $service->notify($organization, $admins, $type, $title, $body);
     }
 
     /** Install the app on this Page for leadgen webhook events (Phase 4). */

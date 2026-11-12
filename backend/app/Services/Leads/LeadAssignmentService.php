@@ -97,6 +97,14 @@ class LeadAssignmentService
             'description' => "Assigned to {$agent->name} ({$via}).",
             'metadata' => ['via' => $via, 'from' => $previous, 'to' => $agent->id],
         ]);
+        if ($actor?->id !== $agent->id && $lead->organization) {
+            app(\App\Services\Notifications\NotificationService::class)->notify(
+                $lead->organization, $agent, 'lead.assigned',
+                ($previous ? 'Lead reassigned to you: ' : 'New lead assigned to you: ') . $lead->full_name,
+                trim(($lead->city ?? '') . ' ' . ($lead->phone_e164 ?? '')),
+                ['lead_id' => $lead->id, 'via' => $via]
+            );
+        }
         return $agent;
     }
 }

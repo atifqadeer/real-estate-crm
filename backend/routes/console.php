@@ -13,3 +13,5 @@ Schedule::job(new \App\Jobs\RefreshMetaTokens)->daily()->name('refresh-meta-toke
 
 // Phase 3: dispatch due scheduled posts + retry sweep, every minute.
 Schedule::job(new \App\Jobs\ProcessScheduledPosts)->everyMinute()->name('process-scheduled-posts')->withoutOverlapping();
+
+Schedule::job(new \App\Jobs\CheckFollowUpNotifications)->hourly();

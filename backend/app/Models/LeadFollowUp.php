@@ -9,8 +9,8 @@ class LeadFollowUp extends Model
 {
     use BelongsToTenant;
 
-    protected $fillable = ['organization_id', 'lead_id', 'user_id', 'due_at', 'note', 'status', 'completed_at'];
-    protected function casts(): array { return ['due_at' => 'datetime', 'completed_at' => 'datetime']; }
+    protected $fillable = ['organization_id', 'lead_id', 'user_id', 'due_at', 'note', 'status', 'completed_at', 'due_notified_at', 'overdue_notified_at'];
+    protected function casts(): array { return ['due_at' => 'datetime', 'completed_at' => 'datetime', 'due_notified_at' => 'datetime', 'overdue_notified_at' => 'datetime']; }
 
     public function lead(): BelongsTo { return $this->belongsTo(Lead::class); }
     public function user(): BelongsTo { return $this->belongsTo(User::class); }

@@ -10,13 +10,20 @@ import {
   leadMySummary, leadBackfill, leadForms, leadFormCreate, leadFormUpdate, leadFormDelete,
   followUpList, followUpCreate, followUpComplete, leadRules, leadRuleCreate, leadRuleDelete,
   leadImportUpload, socialSubscribeLeads,
+  pipelineBoard, leadMove, savedFilters, savedFilterCreate, savedFilterDelete,
+  taskList, taskCreate, taskUpdate, taskDelete,
+  notificationList, notificationReadAll, notificationRead, notificationPreferences, notificationPreferencesUpdate,
+  waAccounts, waConnect, waDisconnect, waTemplates, waSyncTemplates, waConversations, waConversation,
+  waStartForLead, waSendText, waSendTemplate,
   type Me, type Dashboard, type SocialPlatform, type SocialAccount,
   type MediaAsset, type ContentPost, type Destination, type ContentTemplate,
   type Lead, type LeadStage, type LeadSourceT, type LeadFormT, type FollowUp,
+  type PipelineColumn, type SavedFilter, type LeadTaskT, type AppNotification,
+  type WhatsAppAccountT, type WhatsAppTemplateT, type WhatsAppConversationT,
 } from './api';
 
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
-type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'members' | 'settings' | 'audit';
+type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'whatsapp' | 'members' | 'settings' | 'audit';
 
 const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
@@ -24,6 +31,7 @@ const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'social', label: 'Connected Accounts', permission: 'social.view' },
   { id: 'content', label: 'Content & Publishing', permission: 'content.view' },
   { id: 'leads', label: 'Leads', permission: 'leads.view' },
+  { id: 'whatsapp', label: 'WhatsApp Inbox', permission: 'whatsapp.view' },
   { id: 'members', label: 'Users and Roles', permission: 'members.view' },
   { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
   { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
@@ -77,6 +85,7 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {membership && <NotificationBell orgId={membership.organization_id} setError={setError} />}
         <div className="mt-auto text-xs text-slate-400">
           <div>{user.name}</div><div>{user.email}</div>
           <div className="mt-1">Role: {membership?.roles.join(', ')}</div>
@@ -91,6 +100,7 @@ export default function App() {
           canConnect={can('social.connect')} canTest={can('social.test')} canDisconnect={can('social.disconnect')} setError={setError} />}
         {membership && view === 'content' && <ContentView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'leads' && <LeadsView orgId={membership.organization_id} can={can} setError={setError} />}
+        {membership && view === 'whatsapp' && <WhatsAppView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'clients' && <ClientsView user={user} canCreate={can('organizations.create')} setError={setError}
           onCreated={() => me().then(setUser)} />}
         {membership && view === 'members' && <MembersView orgId={membership.organization_id} canInvite={can('members.invite')} setError={setError} />}
@@ -680,16 +690,18 @@ function TemplatesTab({ orgId, can, setError, onApply }: {
 // ---------------- Phase 4: Lead Generation ----------------
 
 function LeadsView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
-  const [tab, setTab] = useState<'leads' | 'my' | 'import' | 'forms' | 'followups' | 'setup'>('leads');
+  const [tab, setTab] = useState<'leads' | 'pipeline' | 'my' | 'tasks' | 'import' | 'forms' | 'followups' | 'setup'>('leads');
   return (
     <div>
       <h2 className="text-2xl font-bold">Leads</h2>
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        {([['leads', 'All leads'], ['my', 'My dashboard'], ['import', 'Import'], ['forms', 'Website forms'], ['followups', 'Follow-ups'], ['setup', 'Setup']] as const).map(([t, label]) => (
+        {([['leads', 'All leads'], ['pipeline', 'Pipeline'], ['my', 'My dashboard'], ['tasks', 'Tasks'], ['import', 'Import'], ['forms', 'Website forms'], ['followups', 'Follow-ups'], ['setup', 'Setup']] as const).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} className={`rounded px-3 py-1.5 ${tab === t ? 'bg-slate-900 text-white' : 'bg-white shadow-sm'}`}>{label}</button>
         ))}
       </div>
       {tab === 'leads' && <LeadsListTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'pipeline' && <PipelineTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'tasks' && <TasksTab orgId={orgId} can={can} setError={setError} />}
       {tab === 'my' && <MyLeadsTab orgId={orgId} setError={setError} />}
       {tab === 'import' && <LeadImportTab orgId={orgId} can={can} setError={setError} />}
       {tab === 'forms' && <LeadFormsTab orgId={orgId} can={can} setError={setError} />}
@@ -709,6 +721,15 @@ function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string
   const [detail, setDetail] = useState<Lead | null>(null);
   const [form, setForm] = useState({ full_name: '', phone: '', email: '', city: '', intent: '', property_type: '', budget_max: '' });
   const [outcome, setOutcome] = useState('');
+  const [filters, setFilters] = useState<SavedFilter[]>([]);
+  const loadFilters = () => savedFilters(orgId).then(setFilters).catch(() => {});
+  useEffect(() => { loadFilters(); }, [orgId]);
+  const applyFilter = (f: SavedFilter) => {
+    setSearch(f.criteria.search ?? '');
+    setStageFilter(f.criteria.stage_id ? String(f.criteria.stage_id) : '');
+    setOnlyDup(!!f.criteria.possible_duplicates);
+    setTimeout(load, 0);
+  };
 
   const load = () => {
     const params = new URLSearchParams();
@@ -731,7 +752,23 @@ function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string
         </select>
         <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={onlyDup} onChange={e => setOnlyDup(e.target.checked)} /> Possible duplicates only</label>
         <button className="rounded border bg-white px-3 py-1.5 text-sm" onClick={load}>Search</button>
+        <button className="rounded border bg-white px-3 py-1.5 text-sm" onClick={async () => {
+          const name = window.prompt('Name this filter view:'); if (!name) return;
+          const shared = window.confirm('Share this view with the whole workspace? (OK = shared, Cancel = private)');
+          try { await savedFilterCreate(orgId, { name, is_shared: shared, criteria: { search, stage_id: stageFilter ? Number(stageFilter) : null, possible_duplicates: onlyDup } }); loadFilters(); } catch (e: any) { setError(e.message); }
+        }}>Save view</button>
       </div>
+      {filters.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {filters.map(f => (
+            <span key={f.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">
+              <button className="font-medium" onClick={() => applyFilter(f)}>{f.name}</button>
+              {f.is_shared && <span className="text-slate-400">shared</span>}
+              <button className="text-slate-400 hover:text-red-600" title="Delete view" onClick={async () => { try { await savedFilterDelete(orgId, f.id); loadFilters(); } catch (e: any) { setError(e.message); } }}>✕</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {can('leads.create') && (
         <form className="mt-3 flex flex-wrap items-end gap-2 rounded-xl bg-white p-3 shadow-sm" onSubmit={async e => {
@@ -840,6 +877,8 @@ function LeadDetail({ orgId, lead, stages, can, setError, onClose, onChange }: {
             <button className="rounded border px-3 py-1.5 text-sm" onClick={async () => { if (!fuDate) return; try { await followUpCreate(orgId, { lead_id: lead.id, due_at: new Date(fuDate).toISOString() }); setFuDate(''); refresh(); } catch (e: any) { setError(e.message); } }}>Schedule follow-up</button>
           </div>
         )}
+
+        {can('whatsapp.view') && <LeadWhatsAppPanel orgId={orgId} lead={lead} can={can} setError={setError} />}
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div>
@@ -1065,6 +1104,340 @@ function LeadSetupTab({ orgId, can, setError }: { orgId: number; can: (p: string
             }}>Add rule</button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Phase 5: notifications, pipeline, tasks, WhatsApp ----------------
+
+function NotificationBell({ orgId, setError }: { orgId: number; setError: (s: string) => void }) {
+  const [items, setItems] = useState<AppNotification[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [showPrefs, setShowPrefs] = useState(false);
+  const [prefTypes, setPrefTypes] = useState<string[]>([]);
+  const [disabled, setDisabled] = useState<string[]>([]);
+
+  const load = () => notificationList(orgId).then(r => { setItems(r.data); setUnread(r.unread_count); }).catch(() => {});
+  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, [orgId]);
+
+  return (
+    <div className="relative mb-3">
+      <button className="flex w-full items-center gap-2 rounded bg-slate-800 px-3 py-2 text-left text-sm text-white" onClick={() => setOpen(o => !o)}>
+        <span>🔔 Notifications</span>
+        {unread > 0 && <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold">{unread}</span>}
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 z-30 mb-2 w-80 rounded-xl bg-white p-2 text-slate-800 shadow-2xl">
+          <div className="flex items-center justify-between px-1">
+            <b className="text-sm">Notifications</b>
+            <span className="flex gap-2 text-xs">
+              <button className="text-blue-600" onClick={async () => { try { await notificationReadAll(orgId); load(); } catch (e: any) { setError(e.message); } }}>Mark all read</button>
+              <button className="text-slate-500" onClick={async () => {
+                if (!showPrefs) { try { const p = await notificationPreferences(orgId); setPrefTypes(p.types); setDisabled(p.disabled_types); } catch (e: any) { setError(e.message); } }
+                setShowPrefs(s => !s);
+              }}>Preferences</button>
+            </span>
+          </div>
+          {showPrefs && (
+            <div className="mt-1 max-h-44 overflow-y-auto rounded bg-slate-50 p-2">
+              <div className="text-[11px] text-slate-500">Mute types in this workspace:</div>
+              {prefTypes.map(t => (
+                <label key={t} className="flex items-center gap-1.5 text-xs">
+                  <input type="checkbox" checked={disabled.includes(t)} onChange={async e => {
+                    const next = e.target.checked ? [...disabled, t] : disabled.filter(x => x !== t);
+                    setDisabled(next);
+                    try { await notificationPreferencesUpdate(orgId, next); } catch (err: any) { setError(err.message); }
+                  }} /> {t}
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="mt-1 flex max-h-72 flex-col gap-1 overflow-y-auto">
+            {items.length === 0 && <p className="p-2 text-xs text-slate-400">No notifications.</p>}
+            {items.map(n => (
+              <button key={n.id} className={`rounded p-2 text-left text-xs ${n.read_at ? 'bg-white' : 'bg-blue-50'}`}
+                onClick={async () => { try { await notificationRead(orgId, n.id); load(); } catch (e: any) { setError(e.message); } }}>
+                <div className="font-medium">{n.title}</div>
+                {n.body && <div className="text-slate-500">{n.body}</div>}
+                <div className="text-[10px] text-slate-400">{n.type} · {new Date(n.created_at).toLocaleString()}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PipelineTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [columns, setColumns] = useState<PipelineColumn[]>([]);
+  const [mine, setMine] = useState(false);
+  const load = () => pipelineBoard(orgId, mine).then(setColumns).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId, mine]);
+  return (
+    <div className="mt-4">
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={mine} onChange={e => setMine(e.target.checked)} /> Show only my leads</label>
+      <div className="mt-3 flex gap-3 overflow-x-auto pb-3">
+        {columns.map(col => (
+          <div key={col.stage.id} className={`flex w-64 shrink-0 flex-col rounded-xl p-2 ${col.stage.is_won ? 'bg-emerald-50' : col.stage.is_lost ? 'bg-red-50' : 'bg-slate-100'}`}
+            onDragOver={e => e.preventDefault()}
+            onDrop={async e => {
+              const leadId = Number(e.dataTransfer.getData('text/plain'));
+              if (!leadId) return;
+              try { await leadMove(orgId, leadId, col.stage.id); load(); } catch (err: any) { setError(err.message); }
+            }}>
+            <div className="flex items-center justify-between px-1 py-1">
+              <b className="text-sm">{col.stage.name}</b>
+              <span className="rounded-full bg-white px-2 text-xs shadow-sm">{col.count}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {col.leads.map((l: any) => (
+                <div key={l.id} draggable={can('leads.edit')}
+                  onDragStart={e => e.dataTransfer.setData('text/plain', String(l.id))}
+                  className="cursor-grab rounded-lg bg-white p-2.5 shadow-sm active:cursor-grabbing">
+                  <div className="text-sm font-medium">{l.full_name}{l.possible_duplicate_of && <span className="ml-1 rounded bg-orange-100 px-1 text-[10px] text-orange-800">dup?</span>}</div>
+                  <div className="text-xs text-slate-500">{l.phone_e164 ?? ''}</div>
+                  <div className="text-xs text-slate-500">{[l.city, l.preferred_location].filter(Boolean).join(' · ')}</div>
+                  {l.property_reference && <div className="text-xs text-slate-400">{l.property_reference}</div>}
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{l.source ?? ''}</span>
+                    <span>{l.assignee ?? 'Unassigned'}</span>
+                  </div>
+                  {l.priority !== 'normal' && <span className={`mt-1 inline-block rounded px-1 text-[10px] ${l.priority === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{l.priority}</span>}
+                </div>
+              ))}
+              {col.leads.length === 0 && <p className="p-2 text-center text-xs text-slate-400">Drop leads here</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-slate-400">Drag a card to another column to change its stage. Every move is recorded in the lead's activity timeline.</p>
+    </div>
+  );
+}
+
+function TasksTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [tasks, setTasks] = useState<LeadTaskT[]>([]);
+  const [scope, setScope] = useState('?scope=mine');
+  const [title, setTitle] = useState('');
+  const load = () => taskList(orgId, scope).then(r => setTasks(r.data)).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId, scope]);
+  return (
+    <div className="mt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {[['?scope=mine', 'My tasks'], ['', 'All tasks']].map(([s, label]) => (
+          <button key={label} onClick={() => setScope(s)} className={`rounded px-3 py-1.5 text-sm ${scope === s ? 'bg-slate-900 text-white' : 'bg-white shadow-sm'}`}>{label}</button>
+        ))}
+        {can('tasks.create') && (
+          <span className="ml-auto flex gap-2">
+            <input className="rounded border px-2 py-1.5 text-sm" placeholder="New task title…" value={title} onChange={e => setTitle(e.target.value)} />
+            <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white" onClick={async () => { if (!title) return; try { await taskCreate(orgId, { title }); setTitle(''); load(); } catch (e: any) { setError(e.message); } }}>Add task</button>
+          </span>
+        )}
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
+        {tasks.map(t => (
+          <div key={t.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 shadow-sm">
+            <input type="checkbox" checked={t.status === 'done'} disabled={!can('tasks.edit')}
+              onChange={async e => { try { await taskUpdate(orgId, t.id, { status: e.target.checked ? 'done' : 'pending' }); load(); } catch (err: any) { setError(err.message); } }} />
+            <b className={`text-sm ${t.status === 'done' ? 'text-slate-400 line-through' : ''}`}>{t.title}</b>
+            {t.lead && <span className="rounded bg-slate-100 px-1.5 text-xs">{t.lead.full_name}</span>}
+            {t.due_at && <span className={`text-xs ${t.status === 'pending' && new Date(t.due_at) < new Date() ? 'font-semibold text-red-600' : 'text-slate-500'}`}>Due {new Date(t.due_at).toLocaleString()}</span>}
+            <span className="text-xs text-slate-400">{t.assignee?.name ?? ''}</span>
+            {t.priority !== 'normal' && <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-700">{t.priority}</span>}
+            {can('tasks.delete') && <button className="ml-auto text-xs text-red-600" onClick={async () => { if (window.confirm('Delete task?')) { try { await taskDelete(orgId, t.id); load(); } catch (e: any) { setError(e.message); } } }}>Delete</button>}
+          </div>
+        ))}
+        {tasks.length === 0 && <p className="text-sm text-slate-500">No tasks here.</p>}
+      </div>
+    </div>
+  );
+}
+
+function WhatsAppChat({ orgId, conversationId, can, setError, onBack }: {
+  orgId: number; conversationId: number; can: (p: string) => boolean; setError: (s: string) => void; onBack?: () => void;
+}) {
+  const [conv, setConv] = useState<WhatsAppConversationT | null>(null);
+  const [text, setText] = useState('');
+  const [templates, setTemplates] = useState<WhatsAppTemplateT[]>([]);
+  const [tpl, setTpl] = useState('');
+  const [params, setParams] = useState('');
+  const load = () => waConversation(orgId, conversationId).then(setConv).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId, conversationId]);
+  useEffect(() => {
+    if (conv?.account?.id) waTemplates(orgId, conv.account.id).then(t => setTemplates(t.filter(x => x.status === 'APPROVED'))).catch(() => {});
+  }, [orgId, conv?.account?.id]);
+
+  if (!conv) return <p className="p-3 text-sm text-slate-500">Loading conversation…</p>;
+  const windowOpen = conv.window_expires_at ? new Date(conv.window_expires_at) > new Date() : false;
+  const selectedTpl = templates.find(t => `${t.name}|${t.language}` === tpl);
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b p-3">
+        {onBack && <button className="rounded border px-2 py-1 text-xs" onClick={onBack}>← All</button>}
+        <div>
+          <b className="text-sm">{conv.contact_name ?? conv.lead?.full_name ?? conv.contact_phone_e164}</b>
+          <div className="text-[11px] text-slate-500">{conv.contact_phone_e164} · via {conv.account?.display_phone_number ?? 'WhatsApp'}</div>
+        </div>
+        <span className={`ml-auto rounded px-2 py-0.5 text-[11px] ${conv.opted_out_at ? 'bg-red-100 text-red-700' : windowOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+          {conv.opted_out_at ? 'Opted out — do not message' : windowOpen ? `24h window open until ${new Date(conv.window_expires_at!).toLocaleTimeString()}` : 'Window closed — template required'}
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto bg-[#efeae2] p-3">
+        {(conv.messages ?? []).map(m => (
+          <div key={m.id} className={`max-w-[75%] rounded-lg p-2 text-sm shadow-sm ${m.direction === 'in' ? 'self-start bg-white' : 'self-end bg-emerald-100'}`}>
+            {m.type === 'template' && <div className="text-[10px] font-semibold text-slate-500">Template: {m.template_name}</div>}
+            <div className="whitespace-pre-wrap">{m.body ?? `(${m.type} message)`}</div>
+            <div className="mt-0.5 text-right text-[10px] text-slate-400">
+              {new Date(m.created_at).toLocaleTimeString()} · {m.direction === 'out' ? (m.status === 'failed' ? `failed: ${m.error ?? ''}` : m.status) : 'received'}
+            </div>
+          </div>
+        ))}
+        {(conv.messages ?? []).length === 0 && <p className="text-center text-xs text-slate-400">No messages yet. Send an approved template to start.</p>}
+      </div>
+      {can('whatsapp.send') && !conv.opted_out_at && (
+        <div className="border-t p-3">
+          {windowOpen ? (
+            <div className="flex gap-2">
+              <input className="flex-1 rounded border px-2 py-2 text-sm" placeholder="Type a reply…" value={text} onChange={e => setText(e.target.value)}
+                onKeyDown={async e => { if (e.key === 'Enter' && text) { try { await waSendText(orgId, conv.id, text); setText(''); load(); } catch (err: any) { setError(err.message); } } }} />
+              <button className="rounded bg-emerald-600 px-4 py-2 text-sm text-white" onClick={async () => { if (!text) return; try { await waSendText(orgId, conv.id, text); setText(''); load(); } catch (e: any) { setError(e.message); } }}>Send</button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <select className="rounded border px-2 py-2 text-sm" value={tpl} onChange={e => setTpl(e.target.value)}>
+                  <option value="">Choose an approved template…</option>
+                  {templates.map(t => <option key={t.id} value={`${t.name}|${t.language}`}>{t.name} ({t.language}) · {t.category}</option>)}
+                </select>
+                <input className="flex-1 rounded border px-2 py-2 text-sm" placeholder="Template values, comma separated (for {{1}}, {{2}}…)" value={params} onChange={e => setParams(e.target.value)} />
+                <button disabled={!selectedTpl} className="rounded bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+                  onClick={async () => { if (!selectedTpl) return; try { await waSendTemplate(orgId, conv.id, { template_name: selectedTpl.name, language: selectedTpl.language, params: params ? params.split(',').map(s => s.trim()) : [] }); setParams(''); load(); } catch (e: any) { setError(e.message); } }}>Send template</button>
+              </div>
+              {selectedTpl && <p className="text-xs text-slate-500">{((selectedTpl.components ?? []).find((c: any) => c.type === 'BODY')?.text ?? '')}</p>}
+              <p className="text-[11px] text-slate-400">Free-form replies unlock for 24 hours after the customer messages you.</p>
+            </div>
+          )}
+        </div>
+      )}
+      {conv.opted_out_at && <p className="border-t p-3 text-xs text-red-600">This contact opted out (STOP). Sending is blocked until they opt back in.</p>}
+    </div>
+  );
+}
+
+function LeadWhatsAppPanel({ orgId, lead, can, setError }: { orgId: number; lead: Lead; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [accounts, setAccounts] = useState<WhatsAppAccountT[]>([]);
+  const [accountId, setAccountId] = useState('');
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  useEffect(() => { waAccounts(orgId).then(a => { setAccounts(a.filter(x => x.status === 'connected')); }).catch(() => {}); }, [orgId]);
+  if (accounts.length === 0) return null;
+  return (
+    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+      <h4 className="text-sm font-semibold">💬 WhatsApp</h4>
+      {!conversationId ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <select className="rounded border px-2 py-1.5 text-sm" value={accountId} onChange={e => setAccountId(e.target.value)}>
+            <option value="">Send from number…</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.verified_name ?? ''} {a.display_phone_number ?? ''}</option>)}
+          </select>
+          <button disabled={!accountId} className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            onClick={async () => { try { const c = await waStartForLead(orgId, lead.id, Number(accountId)); setConversationId(c.id); } catch (e: any) { setError(e.message); } }}>
+            Open chat with this lead
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 h-96 overflow-hidden rounded-lg border bg-white">
+          <WhatsAppChat orgId={orgId} conversationId={conversationId} can={can} setError={setError} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WhatsAppView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [accounts, setAccounts] = useState<WhatsAppAccountT[]>([]);
+  const [conversations, setConversations] = useState<WhatsAppConversationT[]>([]);
+  const [activeConv, setActiveConv] = useState<number | null>(null);
+  const [templates, setTemplates] = useState<Record<number, WhatsAppTemplateT[]>>({});
+  const [form, setForm] = useState({ waba_id: '', phone_number_id: '', access_token: '' });
+
+  const loadAccounts = () => waAccounts(orgId).then(setAccounts).catch(e => setError(e.message));
+  const loadConversations = () => waConversations(orgId).then(r => setConversations(r.data)).catch(e => setError(e.message));
+  useEffect(() => { loadAccounts(); loadConversations(); }, [orgId]);
+  const input = 'w-full rounded border px-2 py-1.5 text-sm';
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold">WhatsApp Inbox</h2>
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl bg-white p-4 shadow-sm">
+            <h3 className="font-semibold">Connected numbers</h3>
+            {accounts.map(a => (
+              <div key={a.id} className="mt-2 rounded border p-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <b>{a.verified_name ?? 'WhatsApp number'}</b>
+                  <span className={`rounded px-1.5 text-[10px] ${a.status === 'connected' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>{a.status}</span>
+                  {a.quality_rating && <span className="text-[10px] text-slate-400">Quality: {a.quality_rating}</span>}
+                </div>
+                <div className="text-xs text-slate-500">{a.display_phone_number} · WABA {a.waba_id}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+                  {can('whatsapp.connect') && a.status === 'connected' && (
+                    <button className="rounded border px-2 py-1" onClick={async () => { try { const r = await waSyncTemplates(orgId, a.id); window.alert(`Synced ${r.synced} templates.`); const t = await waTemplates(orgId, a.id); setTemplates(prev => ({ ...prev, [a.id]: t })); } catch (e: any) { setError(e.message); } }}>Sync templates</button>
+                  )}
+                  {can('whatsapp.templates') && (
+                    <button className="rounded border px-2 py-1" onClick={async () => { try { const t = await waTemplates(orgId, a.id); setTemplates(prev => ({ ...prev, [a.id]: t })); } catch (e: any) { setError(e.message); } }}>Show templates ({templates[a.id]?.length ?? '…'})</button>
+                  )}
+                  {can('whatsapp.connect') && a.status === 'connected' && (
+                    <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={async () => { if (window.confirm('Disconnect this WhatsApp number?')) { try { await waDisconnect(orgId, a.id); loadAccounts(); } catch (e: any) { setError(e.message); } } }}>Disconnect</button>
+                  )}
+                </div>
+                {(templates[a.id] ?? []).map(t => (
+                  <div key={t.id} className="mt-1 text-xs text-slate-600">{t.name} ({t.language}) · {t.category} · <span className={t.status === 'APPROVED' ? 'text-emerald-600' : 'text-amber-600'}>{t.status}</span></div>
+                ))}
+              </div>
+            ))}
+            {accounts.length === 0 && <p className="mt-1 text-sm text-slate-500">No WhatsApp number connected yet.</p>}
+            {can('whatsapp.connect') && (
+              <div className="mt-3 border-t pt-3">
+                <h4 className="text-sm font-medium">Connect a number</h4>
+                <p className="text-[11px] text-slate-500">Use a WhatsApp Business Platform number: enter its WABA ID, phone number ID and a permanent (system user) access token. The number is verified with Meta before anything is saved. In the Meta App Dashboard, point the WhatsApp webhook to <code>/api/v1/webhooks/whatsapp</code> with the same verify token as Lead Ads.</p>
+                <div className="mt-2 flex flex-col gap-2">
+                  <input className={input} placeholder="WhatsApp Business Account ID (WABA)" value={form.waba_id} onChange={e => setForm({ ...form, waba_id: e.target.value })} />
+                  <input className={input} placeholder="Phone number ID" value={form.phone_number_id} onChange={e => setForm({ ...form, phone_number_id: e.target.value })} />
+                  <input className={input} type="password" placeholder="Permanent access token" value={form.access_token} onChange={e => setForm({ ...form, access_token: e.target.value })} />
+                  <button className="rounded bg-emerald-600 px-3 py-2 text-sm text-white" onClick={async () => {
+                    try { await waConnect(orgId, form); setForm({ waba_id: '', phone_number_id: '', access_token: '' }); loadAccounts(); } catch (e: any) { setError(e.message); }
+                  }}>Verify & connect</button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="rounded-xl bg-white p-4 shadow-sm">
+            <h3 className="font-semibold">Conversations</h3>
+            <div className="mt-2 flex flex-col gap-1">
+              {conversations.map(c => (
+                <button key={c.id} onClick={() => setActiveConv(c.id)} className={`rounded p-2 text-left text-sm ${activeConv === c.id ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
+                  <span className="flex items-center gap-2">
+                    <b>{c.contact_name ?? c.lead?.full_name ?? c.contact_phone_e164}</b>
+                    {c.unread_count > 0 && <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">{c.unread_count}</span>}
+                    {c.opted_out_at && <span className="text-[10px] text-red-600">opted out</span>}
+                  </span>
+                  <span className="block text-xs text-slate-400">{c.contact_phone_e164}{c.last_message_at ? ` · ${new Date(c.last_message_at).toLocaleString()}` : ''}</span>
+                </button>
+              ))}
+              {conversations.length === 0 && <p className="text-sm text-slate-500">No conversations yet. When a customer messages your number, a lead and a conversation are created automatically.</p>}
+            </div>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-xl bg-white shadow-sm lg:col-span-2" style={{ minHeight: 480 }}>
+          {activeConv
+            ? <WhatsAppChat orgId={orgId} conversationId={activeConv} can={can} setError={setError} />
+            : <div className="flex h-full items-center justify-center p-8 text-center text-sm text-slate-400">Select a conversation, or open one from a lead's detail page.</div>}
+        </div>
       </div>
     </div>
   );

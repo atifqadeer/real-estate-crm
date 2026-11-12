@@ -151,6 +151,7 @@ class ContentService
         $post->update(['status' => 'approved']);
         $this->recordApproval($post, $actor, 'approved', $comment);
         $this->audit->log($post->organization_id, $actor->id, 'content.approved', ['post_id' => $post->id]);
+        $this->notifyAuthor($post, 'content.approved', 'Post approved: ' . ($post->title ?? 'Untitled post'), $comment);
         return $post;
     }
 
@@ -160,6 +161,7 @@ class ContentService
         $post->update(['status' => 'rejected']);
         $this->recordApproval($post, $actor, 'rejected', $comment);
         $this->audit->log($post->organization_id, $actor->id, 'content.rejected', ['post_id' => $post->id]);
+        $this->notifyAuthor($post, 'content.rejected', 'Post rejected: ' . ($post->title ?? 'Untitled post'), $comment);
         return $post;
     }
 
@@ -169,7 +171,17 @@ class ContentService
         $post->update(['status' => 'changes_requested']);
         $this->recordApproval($post, $actor, 'changes_requested', $comment);
         $this->audit->log($post->organization_id, $actor->id, 'content.changes_requested', ['post_id' => $post->id]);
+        $this->notifyAuthor($post, 'content.changes_requested', 'Changes requested: ' . ($post->title ?? 'Untitled post'), $comment);
         return $post;
+    }
+
+    private function notifyAuthor(ContentPost $post, string $type, string $title, ?string $body): void
+    {
+        $author = $post->author;
+        if ($author && $post->organization) {
+            app(\App\Services\Notifications\NotificationService::class)
+                ->notify($post->organization, $author, $type, $title, $body, ['post_id' => $post->id]);
+        }
     }
 
     private function guardPending(ContentPost $post): void

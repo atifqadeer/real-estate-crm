@@ -18,6 +18,7 @@ class LeadSource extends Model
             ['key' => 'csv_import', 'name' => 'CSV/XLSX import'],
             ['key' => 'website_form', 'name' => 'Website form'],
             ['key' => 'meta_lead_ads', 'name' => 'Meta Lead Ads'],
+            ['key' => 'whatsapp', 'name' => 'WhatsApp'],
             ['key' => 'walk_in', 'name' => 'Walk-in / Office visit'],
             ['key' => 'referral', 'name' => 'Referral'],
         ];

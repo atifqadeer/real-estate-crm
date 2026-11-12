@@ -5,7 +5,17 @@ serving real estate agencies, brokers and developers in Pakistan.
 Built phase by phase from the complete project prompt
 (`Real_Estate_Marketing_Agency_CRM_Complete_Prompt.txt`, 2026-11-12).
 
-**Current status: Phase 4 — Lead Generation COMPLETE in code (2026-11-12)**
+**Current status: Phase 5 — CRM Pipeline & WhatsApp COMPLETE in code (2026-11-12)**
+Kanban pipeline board with drag-and-drop stage moves, saved filter
+views, tasks, an in-app notification center with per-user preferences
+(lead assignment, follow-up due/overdue, content outcomes, social
+account health, WhatsApp messages), and the WhatsApp Cloud API: verified
+number connect, template sync, a two-pane inbox with the 24-hour window
+and opt-out rules enforced server-side, and signature-verified inbound
+webhooks that match or create leads. 51 tests green (Graph API faked;
+live WhatsApp needs a real WABA — see `docs/10-PHASE5-CRM-WHATSAPP.md`).
+
+**Phase 4 — Lead Generation COMPLETE in code (2026-11-12)**
 Full lead model (pipeline stages, sources, touchpoints, activity
 timeline, custom fields), one deduplicating ingestion path for manual
 entry, CSV/XLSX import with outcome reports, public website forms

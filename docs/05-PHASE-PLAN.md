@@ -29,6 +29,16 @@ Delivered: see docs/08. 10 Phase 3 tests green. Live publishing still
 needs the Phase 2 externals (Meta app credentials + Advanced Access)
 and publicly reachable media URLs.
 
+## Phase 5 — CRM Pipeline & WhatsApp — ✅ DONE 2026-11-12 (code + mocked-API tests)
+Kanban pipeline with drag-and-drop stage moves · saved filter views ·
+tasks · in-app notifications with per-user preferences (lead assigned,
+follow-up due/overdue sweep, content outcomes, social health, WhatsApp)
+· WhatsApp Cloud API: verified connect, template sync, inbox with
+24-hour window + opt-out enforcement, inbound webhooks with lead
+matching. See docs/10. 11 Phase 5 tests green. Live WhatsApp needs a
+real WABA + number + permanent token and the webhook pointed at
+/api/v1/webhooks/whatsapp.
+
 ## Phase 4 — Lead Generation — ✅ DONE 2026-11-12 (code + mocked-API tests)
 Lead model + statuses · manual + CSV/XLSX import · website forms ·
 Meta Lead Ads webhooks (signature verified, deduped) · assignment rules ·

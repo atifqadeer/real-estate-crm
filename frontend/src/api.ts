@@ -181,6 +181,50 @@ export const leadRuleCreate = (orgId: number, payload: any) => api<any>(`/organi
 export const leadRuleDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-rules/${id}`, orgId, { method: 'DELETE' });
 export const socialSubscribeLeads = (orgId: number, accountId: number) =>
   api<any>(`/organizations/${orgId}/social/accounts/${accountId}/subscribe-leads`, orgId, { method: 'POST' });
+// --- Phase 5: pipeline, filters, tasks, notifications, WhatsApp ---
+export interface PipelineColumn { stage: LeadStage; count: number; leads: any[] }
+export const pipelineBoard = (orgId: number, mine = false) => api<PipelineColumn[]>(`/organizations/${orgId}/pipeline${mine ? '?assigned_to=me' : ''}`, orgId);
+export const leadMove = (orgId: number, leadId: number, stageId: number) => api<any>(`/organizations/${orgId}/leads/${leadId}/move`, orgId, { method: 'POST', body: JSON.stringify({ stage_id: stageId }) });
+export interface SavedFilter { id: number; name: string; criteria: Record<string, any>; is_shared: boolean; user_id: number }
+export const savedFilters = (orgId: number) => api<SavedFilter[]>(`/organizations/${orgId}/lead-filters`, orgId);
+export const savedFilterCreate = (orgId: number, payload: any) => api<SavedFilter>(`/organizations/${orgId}/lead-filters`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const savedFilterDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-filters/${id}`, orgId, { method: 'DELETE' });
+export interface LeadTaskT { id: number; title: string; description: string | null; status: string; priority: string; due_at: string | null; completed_at: string | null; lead?: { id: number; full_name: string } | null; assignee?: { id: number; name: string } | null }
+export const taskList = (orgId: number, scope = '') => api<{ data: LeadTaskT[]; total: number }>(`/organizations/${orgId}/tasks${scope}`, orgId);
+export const taskCreate = (orgId: number, payload: any) => api<LeadTaskT>(`/organizations/${orgId}/tasks`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const taskUpdate = (orgId: number, id: number, payload: any) => api<LeadTaskT>(`/organizations/${orgId}/tasks/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
+export const taskDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/tasks/${id}`, orgId, { method: 'DELETE' });
+export interface AppNotification { id: number; type: string; title: string; body: string | null; data: Record<string, any> | null; read_at: string | null; created_at: string }
+export const notificationList = (orgId: number) => api<{ data: AppNotification[]; unread_count: number }>(`/organizations/${orgId}/notifications`, orgId);
+export const notificationReadAll = (orgId: number) => api<any>(`/organizations/${orgId}/notifications/read-all`, orgId, { method: 'POST' });
+export const notificationRead = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/notifications/${id}/read`, orgId, { method: 'POST' });
+export const notificationPreferences = (orgId: number) => api<{ types: string[]; disabled_types: string[] }>(`/organizations/${orgId}/notification-preferences`, orgId);
+export const notificationPreferencesUpdate = (orgId: number, disabled: string[]) =>
+  api<any>(`/organizations/${orgId}/notification-preferences`, orgId, { method: 'PUT', body: JSON.stringify({ disabled_types: disabled }) });
+
+export interface WhatsAppAccountT { id: number; waba_id: string; phone_number_id: string; display_phone_number: string | null; verified_name: string | null; quality_rating: string | null; status: string }
+export interface WhatsAppTemplateT { id: number; name: string; language: string; category: string | null; status: string | null; components: any[] | null }
+export interface WhatsAppConversationT {
+  id: number; contact_phone_e164: string; contact_name: string | null; status: string; unread_count: number;
+  window_expires_at: string | null; last_message_at: string | null; opted_out_at: string | null;
+  lead?: { id: number; full_name: string } | null; account?: { id: number; display_phone_number: string | null; verified_name?: string | null } | null;
+  messages?: WhatsAppMessageT[]; messages_count?: number;
+}
+export interface WhatsAppMessageT { id: number; direction: 'in' | 'out'; type: string; body: string | null; status: string; template_name: string | null; error: string | null; created_at: string }
+export const waAccounts = (orgId: number) => api<WhatsAppAccountT[]>(`/organizations/${orgId}/whatsapp/accounts`, orgId);
+export const waConnect = (orgId: number, payload: any) => api<WhatsAppAccountT>(`/organizations/${orgId}/whatsapp/accounts`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const waDisconnect = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/whatsapp/accounts/${id}/disconnect`, orgId, { method: 'POST' });
+export const waTemplates = (orgId: number, accountId: number) => api<WhatsAppTemplateT[]>(`/organizations/${orgId}/whatsapp/accounts/${accountId}/templates`, orgId);
+export const waSyncTemplates = (orgId: number, accountId: number) => api<{ synced: number }>(`/organizations/${orgId}/whatsapp/accounts/${accountId}/sync-templates`, orgId, { method: 'POST' });
+export const waConversations = (orgId: number) => api<{ data: WhatsAppConversationT[] }>(`/organizations/${orgId}/whatsapp/conversations`, orgId);
+export const waConversation = (orgId: number, id: number) => api<WhatsAppConversationT>(`/organizations/${orgId}/whatsapp/conversations/${id}`, orgId);
+export const waStartForLead = (orgId: number, leadId: number, accountId: number) =>
+  api<WhatsAppConversationT>(`/organizations/${orgId}/whatsapp/conversations/start`, orgId, { method: 'POST', body: JSON.stringify({ lead_id: leadId, whatsapp_account_id: accountId }) });
+export const waSendText = (orgId: number, convId: number, body: string) =>
+  api<WhatsAppMessageT>(`/organizations/${orgId}/whatsapp/conversations/${convId}/send-text`, orgId, { method: 'POST', body: JSON.stringify({ body }) });
+export const waSendTemplate = (orgId: number, convId: number, payload: any) =>
+  api<WhatsAppMessageT>(`/organizations/${orgId}/whatsapp/conversations/${convId}/send-template`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+
 export async function leadImportUpload(orgId: number, file: File): Promise<any> {
   const t = token();
   const form = new FormData();
