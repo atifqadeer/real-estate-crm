@@ -137,3 +137,60 @@ export const templateList = (orgId: number) => api<ContentTemplate[]>(`/organiza
 export const templateCreate = (orgId: number, payload: any) => api<ContentTemplate>(`/organizations/${orgId}/templates`, orgId, { method: 'POST', body: JSON.stringify(payload) });
 export const templateDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/templates/${id}`, orgId, { method: 'DELETE' });
 export const templateSeed = (orgId: number) => api<{ created: number }>(`/organizations/${orgId}/templates/seed-starters`, orgId, { method: 'POST' });
+
+// --- Phase 4: leads ---
+export interface LeadStage { id: number; name: string; slug: string; is_won: boolean; is_lost: boolean; is_system: boolean }
+export interface LeadSourceT { id: number; key: string; name: string; is_system: boolean }
+export interface Lead {
+  id: number; full_name: string; phone_e164: string | null; whatsapp_e164: string | null; email: string | null;
+  city: string | null; area: string | null; property_type: string | null; property_reference: string | null;
+  intent: string | null; preferred_location: string | null; budget_min: string | null; budget_max: string | null;
+  priority: string; campaign_name: string | null; ad_name: string | null; meta_form_id: string | null;
+  utm_source: string | null; utm_campaign: string | null; notes: string | null;
+  custom_fields: Record<string, string> | null; possible_duplicate_of: number | null;
+  created_at: string; source?: { id: number; name: string; key: string } | null;
+  stage?: { id: number; name: string; slug: string } | null; assignee?: { id: number; name: string } | null;
+  assigned_to: number | null; lead_pipeline_stage_id: number | null;
+  touchpoints?: any[]; activities?: any[]; follow_ups?: any[];
+  possible_duplicate_of_lead?: { id: number; full_name: string; phone_e164: string | null } | null;
+}
+export interface LeadFormT { id: number; name: string; public_key: string; property_reference: string | null; intent: string | null; success_message: string; is_active: boolean; submissions_count: number }
+export interface FollowUp { id: number; lead_id: number; due_at: string; note: string | null; status: string; lead?: { id: number; full_name: string; phone_e164: string | null }; user?: { id: number; name: string } }
+
+export const leadStages = (orgId: number) => api<LeadStage[]>(`/organizations/${orgId}/lead-stages`, orgId);
+export const leadStageCreate = (orgId: number, payload: any) => api<LeadStage>(`/organizations/${orgId}/lead-stages`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const leadSources = (orgId: number) => api<LeadSourceT[]>(`/organizations/${orgId}/lead-sources`, orgId);
+export const leadList = (orgId: number, params = '') => api<{ data: Lead[]; total: number }>(`/organizations/${orgId}/leads${params}`, orgId);
+export const leadGet = (orgId: number, id: number) => api<Lead>(`/organizations/${orgId}/leads/${id}`, orgId);
+export const leadCreate = (orgId: number, payload: any) => api<{ data: Lead; outcome: string }>(`/organizations/${orgId}/leads`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const leadUpdate = (orgId: number, id: number, payload: any) => api<Lead>(`/organizations/${orgId}/leads/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
+export const leadDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/leads/${id}`, orgId, { method: 'DELETE' });
+export const leadAddNote = (orgId: number, id: number, note: string, markContacted: boolean) =>
+  api<any>(`/organizations/${orgId}/leads/${id}/notes`, orgId, { method: 'POST', body: JSON.stringify({ note, mark_contacted: markContacted }) });
+export const leadMySummary = (orgId: number) => api<Record<string, number>>(`/organizations/${orgId}/leads/my-summary`, orgId);
+export const leadBackfill = (orgId: number, payload: any) => api<any>(`/organizations/${orgId}/leads/meta/backfill`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const leadForms = (orgId: number) => api<LeadFormT[]>(`/organizations/${orgId}/lead-forms`, orgId);
+export const leadFormCreate = (orgId: number, payload: any) => api<LeadFormT>(`/organizations/${orgId}/lead-forms`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const leadFormUpdate = (orgId: number, id: number, payload: any) => api<LeadFormT>(`/organizations/${orgId}/lead-forms/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
+export const leadFormDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-forms/${id}`, orgId, { method: 'DELETE' });
+export const followUpList = (orgId: number, scope = '') => api<{ data: FollowUp[] }>(`/organizations/${orgId}/follow-ups${scope}`, orgId);
+export const followUpCreate = (orgId: number, payload: any) => api<FollowUp>(`/organizations/${orgId}/follow-ups`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const followUpComplete = (orgId: number, id: number) => api<FollowUp>(`/organizations/${orgId}/follow-ups/${id}/complete`, orgId, { method: 'POST' });
+export const leadRules = (orgId: number) => api<any[]>(`/organizations/${orgId}/lead-rules`, orgId);
+export const leadRuleCreate = (orgId: number, payload: any) => api<any>(`/organizations/${orgId}/lead-rules`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const leadRuleDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-rules/${id}`, orgId, { method: 'DELETE' });
+export const socialSubscribeLeads = (orgId: number, accountId: number) =>
+  api<any>(`/organizations/${orgId}/social/accounts/${accountId}/subscribe-leads`, orgId, { method: 'POST' });
+export async function leadImportUpload(orgId: number, file: File): Promise<any> {
+  const t = token();
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API}/organizations/${orgId}/lead-imports`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}), 'X-Organization-Id': String(orgId) },
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error?.message ?? body?.message ?? `Import failed (${res.status})`);
+  return body;
+}

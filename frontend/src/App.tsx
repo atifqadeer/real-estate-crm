@@ -6,19 +6,24 @@ import {
   mediaList, mediaUpload, mediaDelete, postList, postGet, postCreate, postUpdate, postDelete,
   postDuplicate, postDestinations, postPreviews, postAction, postRetryTarget, postCalendar,
   templateList, templateCreate, templateDelete, templateSeed,
+  leadStages, leadStageCreate, leadSources, leadList, leadGet, leadCreate, leadUpdate, leadDelete, leadAddNote,
+  leadMySummary, leadBackfill, leadForms, leadFormCreate, leadFormUpdate, leadFormDelete,
+  followUpList, followUpCreate, followUpComplete, leadRules, leadRuleCreate, leadRuleDelete,
+  leadImportUpload, socialSubscribeLeads,
   type Me, type Dashboard, type SocialPlatform, type SocialAccount,
   type MediaAsset, type ContentPost, type Destination, type ContentTemplate,
+  type Lead, type LeadStage, type LeadSourceT, type LeadFormT, type FollowUp,
 } from './api';
 
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
-// Leads / Campaigns nav appears when those phases ship.
-type View = 'dashboard' | 'clients' | 'social' | 'content' | 'members' | 'settings' | 'audit';
+type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'members' | 'settings' | 'audit';
 
 const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
   { id: 'clients', label: 'Clients / Organizations', permission: 'organizations.view' },
   { id: 'social', label: 'Connected Accounts', permission: 'social.view' },
   { id: 'content', label: 'Content & Publishing', permission: 'content.view' },
+  { id: 'leads', label: 'Leads', permission: 'leads.view' },
   { id: 'members', label: 'Users and Roles', permission: 'members.view' },
   { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
   { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
@@ -85,6 +90,7 @@ export default function App() {
         {membership && view === 'social' && <SocialView orgId={membership.organization_id}
           canConnect={can('social.connect')} canTest={can('social.test')} canDisconnect={can('social.disconnect')} setError={setError} />}
         {membership && view === 'content' && <ContentView orgId={membership.organization_id} can={can} setError={setError} />}
+        {membership && view === 'leads' && <LeadsView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'clients' && <ClientsView user={user} canCreate={can('organizations.create')} setError={setError}
           onCreated={() => me().then(setUser)} />}
         {membership && view === 'members' && <MembersView orgId={membership.organization_id} canInvite={can('members.invite')} setError={setError} />}
@@ -283,6 +289,12 @@ function SocialView({ orgId, canConnect, canTest, canDisconnect, setError }: {
                   <button disabled={busy === `test-${a.id}`} className="rounded border px-3 py-1.5 text-sm"
                     onClick={async () => { setBusy(`test-${a.id}`); try { const r = await socialTest(orgId, a.id); setAccounts(prev => prev.map(x => x.id === r.id ? r : x)); } catch (e: any) { setError(e.message); } setBusy(''); }}>
                     Test connection
+                  </button>
+                )}
+                {canConnect && a.platform === 'facebook' && a.status === 'connected' && (
+                  <button className="rounded border px-3 py-1.5 text-sm" title="Install the app on this Page so new Meta Lead Ads leads arrive automatically"
+                    onClick={async () => { try { const r = await socialSubscribeLeads(orgId, a.id); window.alert(r.message ?? 'Subscribed to Lead Ads.'); } catch (e: any) { setError(e.message); } }}>
+                    Subscribe to Lead Ads
                   </button>
                 )}
                 {canConnect && (a.status === 'expired' || a.status === 'permission_required' || a.status === 'error' || a.status === 'disconnected') && (
@@ -661,6 +673,399 @@ function TemplatesTab({ orgId, can, setError, onApply }: {
           <button className="mt-2 rounded bg-emerald-600 px-3 py-1.5 text-sm text-white" onClick={async () => { try { await templateCreate(orgId, form); setForm({ name: '', category: '', caption: '', hashtags: '' }); load(); } catch (e: any) { setError(e.message); } }}>Save template</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------- Phase 4: Lead Generation ----------------
+
+function LeadsView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [tab, setTab] = useState<'leads' | 'my' | 'import' | 'forms' | 'followups' | 'setup'>('leads');
+  return (
+    <div>
+      <h2 className="text-2xl font-bold">Leads</h2>
+      <div className="mt-3 flex flex-wrap gap-2 text-sm">
+        {([['leads', 'All leads'], ['my', 'My dashboard'], ['import', 'Import'], ['forms', 'Website forms'], ['followups', 'Follow-ups'], ['setup', 'Setup']] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setTab(t)} className={`rounded px-3 py-1.5 ${tab === t ? 'bg-slate-900 text-white' : 'bg-white shadow-sm'}`}>{label}</button>
+        ))}
+      </div>
+      {tab === 'leads' && <LeadsListTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'my' && <MyLeadsTab orgId={orgId} setError={setError} />}
+      {tab === 'import' && <LeadImportTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'forms' && <LeadFormsTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'followups' && <FollowUpsTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'setup' && <LeadSetupTab orgId={orgId} can={can} setError={setError} />}
+    </div>
+  );
+}
+
+function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [stages, setStages] = useState<LeadStage[]>([]);
+  const [sources, setSources] = useState<LeadSourceT[]>([]);
+  const [search, setSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
+  const [onlyDup, setOnlyDup] = useState(false);
+  const [detail, setDetail] = useState<Lead | null>(null);
+  const [form, setForm] = useState({ full_name: '', phone: '', email: '', city: '', intent: '', property_type: '', budget_max: '' });
+  const [outcome, setOutcome] = useState('');
+
+  const load = () => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (stageFilter) params.set('stage_id', stageFilter);
+    if (onlyDup) params.set('possible_duplicates', '1');
+    leadList(orgId, `?${params.toString()}`).then(r => setLeads(r.data)).catch(e => setError(e.message));
+  };
+  useEffect(() => { load(); }, [orgId, stageFilter, onlyDup]);
+  useEffect(() => { leadStages(orgId).then(setStages).catch(() => {}); leadSources(orgId).then(setSources).catch(() => {}); }, [orgId]);
+
+  const input = 'rounded border px-2 py-1.5 text-sm';
+  return (
+    <div className="mt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <input className={input} placeholder="Search name, phone, email, city…" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && load()} />
+        <select className={input} value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
+          <option value="">All stages</option>
+          {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={onlyDup} onChange={e => setOnlyDup(e.target.checked)} /> Possible duplicates only</label>
+        <button className="rounded border bg-white px-3 py-1.5 text-sm" onClick={load}>Search</button>
+      </div>
+
+      {can('leads.create') && (
+        <form className="mt-3 flex flex-wrap items-end gap-2 rounded-xl bg-white p-3 shadow-sm" onSubmit={async e => {
+          e.preventDefault();
+          try {
+            const r = await leadCreate(orgId, { ...form, budget_max: form.budget_max ? Number(form.budget_max) : null, source_key: 'manual' });
+            setOutcome(r.outcome === 'created' ? 'Lead created.' : r.outcome === 'touchpoint' ? 'Matched an existing lead — saved as a touchpoint instead of a duplicate.' : 'Created but flagged as a possible duplicate for review.');
+            setForm({ full_name: '', phone: '', email: '', city: '', intent: '', property_type: '', budget_max: '' });
+            load();
+          } catch (err: any) { setError(err.message); }
+        }}>
+          <label className="text-xs">Full name<input required className={`${input} block`} value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} /></label>
+          <label className="text-xs">Phone<input className={`${input} block`} placeholder="03XX-XXXXXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></label>
+          <label className="text-xs">Email<input className={`${input} block`} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></label>
+          <label className="text-xs">City<input className={`${input} block`} value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} /></label>
+          <label className="text-xs">Intent<select className={`${input} block`} value={form.intent} onChange={e => setForm({ ...form, intent: e.target.value })}><option value="">—</option><option value="buy">Buy</option><option value="sell">Sell</option><option value="rent">Rent</option><option value="invest">Invest</option></select></label>
+          <label className="text-xs">Max budget (PKR)<input className={`${input} block`} type="number" value={form.budget_max} onChange={e => setForm({ ...form, budget_max: e.target.value })} /></label>
+          <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white">Add lead</button>
+          {outcome && <span className="text-xs text-emerald-700">{outcome}</span>}
+        </form>
+      )}
+
+      <div className="mt-3 overflow-x-auto rounded-xl bg-white shadow-sm">
+        <table className="w-full text-left text-sm">
+          <thead><tr className="border-b text-xs text-slate-500">
+            <th className="p-2">Name</th><th className="p-2">Contact</th><th className="p-2">City / Interest</th><th className="p-2">Source</th><th className="p-2">Stage</th><th className="p-2">Assigned</th><th className="p-2">Received</th><th className="p-2"></th>
+          </tr></thead>
+          <tbody>
+            {leads.map(l => (
+              <tr key={l.id} className="border-b last:border-0 hover:bg-slate-50">
+                <td className="p-2 font-medium">{l.full_name}{l.possible_duplicate_of && <span className="ml-1 rounded bg-orange-100 px-1 text-[10px] text-orange-800">possible duplicate</span>}</td>
+                <td className="p-2 text-xs">{l.phone_e164 ?? '—'}{l.email ? <div>{l.email}</div> : null}</td>
+                <td className="p-2 text-xs">{l.city ?? ''}{l.preferred_location ? ` · ${l.preferred_location}` : ''}{l.property_reference ? <div>{l.property_reference}</div> : null}</td>
+                <td className="p-2 text-xs">{l.source?.name ?? '—'}{l.campaign_name ? <div className="text-slate-400">{l.campaign_name}</div> : null}</td>
+                <td className="p-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{l.stage?.name ?? '—'}</span></td>
+                <td className="p-2 text-xs">{l.assignee?.name ?? <span className="text-slate-400">Unassigned</span>}</td>
+                <td className="p-2 text-xs text-slate-500">{new Date(l.created_at).toLocaleDateString()}</td>
+                <td className="p-2"><button className="text-xs text-blue-600 underline" onClick={async () => { try { setDetail(await leadGet(orgId, l.id)); } catch (e: any) { setError(e.message); } }}>Open</button></td>
+              </tr>
+            ))}
+            {leads.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-slate-400">No leads found.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-1 text-xs text-slate-400">Sources in this workspace: {sources.map(s => s.name).join(' · ') || '—'}</p>
+      {detail && <LeadDetail orgId={orgId} lead={detail} stages={stages} can={can} setError={setError} onClose={() => { setDetail(null); load(); }} onChange={setDetail} />}
+    </div>
+  );
+}
+
+function LeadDetail({ orgId, lead, stages, can, setError, onClose, onChange }: {
+  orgId: number; lead: Lead; stages: LeadStage[]; can: (p: string) => boolean; setError: (s: string) => void;
+  onClose: () => void; onChange: (l: Lead) => void;
+}) {
+  const [note, setNote] = useState('');
+  const [fuDate, setFuDate] = useState('');
+  const refresh = async () => { try { onChange(await leadGet(orgId, lead.id)); } catch (e: any) { setError(e.message); } };
+  return (
+    <div className="fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-lg font-bold">{lead.full_name}</h3>
+            <div className="text-sm text-slate-500">{lead.phone_e164 ?? ''} {lead.whatsapp_e164 ? `· WhatsApp ${lead.whatsapp_e164}` : ''} {lead.email ? `· ${lead.email}` : ''}</div>
+            <div className="text-xs text-slate-400">Source: {lead.source?.name ?? '—'}{lead.ad_name ? ` · Ad: ${lead.ad_name}` : ''}{lead.utm_campaign ? ` · UTM campaign: ${lead.utm_campaign}` : ''}</div>
+            {lead.possible_duplicate_of_lead && <div className="mt-1 rounded bg-orange-50 p-2 text-xs text-orange-800">⚠ Possible duplicate of {lead.possible_duplicate_of_lead.full_name} ({lead.possible_duplicate_of_lead.phone_e164}) — same phone, different name. Review before merging; nothing was auto-merged.</div>}
+          </div>
+          <button className="rounded border px-2 py-1 text-sm" onClick={onClose}>Close</button>
+        </div>
+
+        <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+          <div><span className="text-slate-400">City:</span> {lead.city ?? '—'}</div>
+          <div><span className="text-slate-400">Area:</span> {lead.area ?? lead.preferred_location ?? '—'}</div>
+          <div><span className="text-slate-400">Intent:</span> {lead.intent ?? '—'}</div>
+          <div><span className="text-slate-400">Property:</span> {lead.property_type ?? '—'} {lead.property_reference ?? ''}</div>
+          <div><span className="text-slate-400">Budget:</span> {lead.budget_min ?? ''}{lead.budget_max ? ` – ${lead.budget_max}` : ''} PKR</div>
+          <div><span className="text-slate-400">Priority:</span> {lead.priority}</div>
+        </div>
+        {lead.custom_fields && Object.keys(lead.custom_fields).length > 0 && (
+          <div className="mt-2 rounded bg-slate-50 p-2 text-xs">
+            <b>Form answers:</b> {Object.entries(lead.custom_fields).map(([k, v]) => <div key={k}>{k}: {String(v)}</div>)}
+          </div>
+        )}
+        {lead.notes && <p className="mt-2 whitespace-pre-wrap rounded bg-slate-50 p-2 text-sm">{lead.notes}</p>}
+
+        {can('leads.edit') && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <label>Stage:
+              <select className="ml-1 rounded border px-2 py-1" value={lead.lead_pipeline_stage_id ?? ''} onChange={async e => { try { await leadUpdate(orgId, lead.id, { lead_pipeline_stage_id: Number(e.target.value) }); refresh(); } catch (err: any) { setError(err.message); } }}>
+                {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+            {can('leads.delete') && <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={async () => { if (window.confirm('Delete this lead?')) { try { await leadDelete(orgId, lead.id); onClose(); } catch (e: any) { setError(e.message); } } }}>Delete lead</button>}
+          </div>
+        )}
+
+        {can('leads.edit') && (
+          <div className="mt-3 flex gap-2">
+            <input className="flex-1 rounded border px-2 py-1.5 text-sm" placeholder="Add a note / call outcome…" value={note} onChange={e => setNote(e.target.value)} />
+            <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" onClick={async () => { if (!note) return; try { await leadAddNote(orgId, lead.id, note, true); setNote(''); refresh(); } catch (e: any) { setError(e.message); } }}>Add note</button>
+          </div>
+        )}
+        {can('leads.followups') && (
+          <div className="mt-2 flex gap-2">
+            <input type="datetime-local" className="rounded border px-2 py-1.5 text-sm" value={fuDate} onChange={e => setFuDate(e.target.value)} />
+            <button className="rounded border px-3 py-1.5 text-sm" onClick={async () => { if (!fuDate) return; try { await followUpCreate(orgId, { lead_id: lead.id, due_at: new Date(fuDate).toISOString() }); setFuDate(''); refresh(); } catch (e: any) { setError(e.message); } }}>Schedule follow-up</button>
+          </div>
+        )}
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <h4 className="text-sm font-semibold">Touchpoints ({lead.touchpoints?.length ?? 0})</h4>
+            <div className="mt-1 flex flex-col gap-1 text-xs text-slate-600">
+              {(lead.touchpoints ?? []).map((t: any) => <div key={t.id} className="rounded bg-slate-50 p-1.5">{t.source?.name ?? 'Source'} · {new Date(t.created_at).toLocaleString()}{t.campaign_name ? ` · ${t.campaign_name}` : ''}</div>)}
+            </div>
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold">Activity</h4>
+            <div className="mt-1 flex max-h-56 flex-col gap-1 overflow-y-auto text-xs text-slate-600">
+              {(lead.activities ?? []).slice().reverse().map((a: any) => <div key={a.id} className="rounded bg-slate-50 p-1.5"><b>{a.type.replaceAll('_', ' ')}</b> · {new Date(a.created_at).toLocaleString()}<div>{a.description}</div></div>)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MyLeadsTab({ orgId, setError }: { orgId: number; setError: (s: string) => void }) {
+  const [summary, setSummary] = useState<Record<string, number> | null>(null);
+  useEffect(() => { leadMySummary(orgId).then(setSummary).catch(e => setError(e.message)); }, [orgId]);
+  if (!summary) return <p className="mt-4 text-sm text-slate-500">Loading…</p>;
+  const cards: [string, number][] = [
+    ['My leads', summary.my_total], ['New', summary.my_new], ['Contacted', summary.my_contacted],
+    ['Qualified / Interested', summary.my_qualified], ['Viewings scheduled', summary.my_viewings],
+    ['Converted', summary.my_converted], ['Lost', summary.my_lost],
+    ['Follow-ups due today', summary.followups_due_today], ['Follow-ups overdue', summary.followups_overdue],
+    ['Unassigned (all)', summary.unassigned_total],
+  ];
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+      {cards.map(([label, value]) => (
+        <div key={label} className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-2xl font-bold">{value}</div>
+          <div className="text-xs text-slate-500">{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LeadImportTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [report, setReport] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [backfill, setBackfill] = useState<{ account: string; form: string }>({ account: '', form: '' });
+  const [backfillResult, setBackfillResult] = useState<any>(null);
+  useEffect(() => { socialAccounts(orgId).then(a => setAccounts(a.filter(x => x.platform === 'facebook'))).catch(() => {}); }, [orgId]);
+
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <div className="rounded-xl bg-white p-4 shadow-sm">
+        <h3 className="font-semibold">Import leads from CSV / XLSX</h3>
+        <p className="text-xs text-slate-500">Headers are matched flexibly (Full Name, Phone Number, Email, City, Budget…). Phones are normalized to +92 format; duplicates become touchpoints on the existing lead; same phone with a different name is flagged for review, never merged.</p>
+        {can('leads.import') ? (
+          <label className="mt-2 inline-block cursor-pointer rounded bg-emerald-600 px-4 py-2 text-sm text-white">
+            {busy ? 'Importing…' : 'Choose .csv or .xlsx file'}
+            <input type="file" accept=".csv,.xlsx,.txt" className="hidden" onChange={async e => {
+              const f = e.target.files?.[0]; if (!f) return; setBusy(true);
+              try { const r = await leadImportUpload(orgId, f); setReport(r.report); } catch (err: any) { setError(err.message); }
+              setBusy(false); e.target.value = '';
+            }} />
+          </label>
+        ) : <p className="mt-2 text-sm text-slate-400">You do not have import permission.</p>}
+        {report && (
+          <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-5">
+            {[['Rows', report.total], ['Created', report.created], ['Duplicates → touchpoints', report.touchpoints], ['Possible duplicates', report.possible_duplicates], ['Invalid rows', report.invalid]].map(([k, v]) => (
+              <div key={k as string} className="rounded bg-slate-50 p-2"><b>{v as number}</b><div className="text-xs text-slate-500">{k}</div></div>
+            ))}
+            {report.errors?.length > 0 && <div className="col-span-full text-xs text-red-600">{report.errors.map((e: any) => `Row ${e.row}: ${e.error}`).join(' · ')}</div>}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl bg-white p-4 shadow-sm">
+        <h3 className="font-semibold">Meta Lead Ads backfill</h3>
+        <p className="text-xs text-slate-500">Pull existing leads of a lead form into this workspace (uses the Page token; leads already imported are skipped by their Meta lead ID).</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <select className="rounded border px-2 py-1.5 text-sm" value={backfill.account} onChange={e => setBackfill({ ...backfill, account: e.target.value })}>
+            <option value="">Select Facebook Page…</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.display_name}</option>)}
+          </select>
+          <input className="rounded border px-2 py-1.5 text-sm" placeholder="Lead form ID" value={backfill.form} onChange={e => setBackfill({ ...backfill, form: e.target.value })} />
+          <button disabled={!backfill.account || !backfill.form} className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            onClick={async () => { try { setBackfillResult(await leadBackfill(orgId, { social_account_id: Number(backfill.account), form_id: backfill.form })); } catch (e: any) { setError(e.message); } }}>Run backfill</button>
+        </div>
+        {backfillResult && <p className="mt-2 text-sm">Fetched {backfillResult.fetched} · created {backfillResult.created} · touchpoints {backfillResult.touchpoints} · already known {backfillResult.duplicates}</p>}
+      </div>
+    </div>
+  );
+}
+
+function LeadFormsTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [forms, setForms] = useState<LeadFormT[]>([]);
+  const [name, setName] = useState('');
+  const [ref, setRef] = useState('');
+  const load = () => leadForms(orgId).then(setForms).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId]);
+  const apiBase = (import.meta as any).env?.VITE_API_URL ?? 'http://127.0.0.1:8000/api/v1';
+  return (
+    <div className="mt-4">
+      {can('leads.forms') && (
+        <div className="flex flex-wrap gap-2 rounded-xl bg-white p-3 shadow-sm">
+          <input className="rounded border px-2 py-1.5 text-sm" placeholder="Form name (e.g. Bahria Listing Enquiry)" value={name} onChange={e => setName(e.target.value)} />
+          <input className="rounded border px-2 py-1.5 text-sm" placeholder="Property reference (optional)" value={ref} onChange={e => setRef(e.target.value)} />
+          <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white" onClick={async () => { if (!name) return; try { await leadFormCreate(orgId, { name, property_reference: ref || null }); setName(''); setRef(''); load(); } catch (e: any) { setError(e.message); } }}>Create form</button>
+        </div>
+      )}
+      <div className="mt-3 flex flex-col gap-3">
+        {forms.map(f => (
+          <div key={f.id} className="rounded-xl bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <b>{f.name}</b>
+              <span className={`rounded px-2 py-0.5 text-xs ${f.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>{f.is_active ? 'active' : 'paused'}</span>
+              <span className="text-xs text-slate-400">{f.submissions_count} submissions</span>
+              <span className="ml-auto flex gap-1.5 text-xs">
+                {can('leads.forms') && <button className="rounded border px-2 py-1" onClick={async () => { try { await leadFormUpdate(orgId, f.id, { is_active: !f.is_active }); load(); } catch (e: any) { setError(e.message); } }}>{f.is_active ? 'Pause' : 'Activate'}</button>}
+                {can('leads.forms') && <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={async () => { if (window.confirm('Delete this form?')) { try { await leadFormDelete(orgId, f.id); load(); } catch (e: any) { setError(e.message); } } }}>Delete</button>}
+              </span>
+            </div>
+            <div className="mt-2 text-xs text-slate-600">
+              <div>Public submit endpoint: <code className="rounded bg-slate-100 px-1">{apiBase}/public/forms/{f.public_key}/submit</code></div>
+              <div className="mt-1">Embed on your site with a form POST to that URL (fields: full_name, phone, whatsapp, email, city, preferred_location, budget_min, budget_max, message, plus utm_* hidden fields). Submissions are deduplicated and auto-assigned like every other source.</div>
+            </div>
+          </div>
+        ))}
+        {forms.length === 0 && <p className="text-sm text-slate-500">No website forms yet.</p>}
+      </div>
+    </div>
+  );
+}
+
+function FollowUpsTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [scope, setScope] = useState('?scope=mine');
+  const [items, setItems] = useState<FollowUp[]>([]);
+  const load = () => followUpList(orgId, scope).then(r => setItems(r.data)).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId, scope]);
+  return (
+    <div className="mt-4">
+      <div className="flex gap-2 text-sm">
+        {[['?scope=mine', 'Mine'], ['?scope=today', 'Due today'], ['?scope=overdue', 'Overdue'], ['', 'All']].map(([s, label]) => (
+          <button key={label} onClick={() => setScope(s)} className={`rounded px-3 py-1.5 ${scope === s ? 'bg-slate-900 text-white' : 'bg-white shadow-sm'}`}>{label}</button>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
+        {items.map(f => {
+          const overdue = f.status === 'pending' && new Date(f.due_at) < new Date();
+          return (
+            <div key={f.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 shadow-sm">
+              <b className="text-sm">{f.lead?.full_name ?? `Lead #${f.lead_id}`}</b>
+              <span className="text-xs text-slate-500">{f.lead?.phone_e164 ?? ''}</span>
+              <span className={`rounded px-2 py-0.5 text-xs ${f.status === 'done' ? 'bg-emerald-100 text-emerald-800' : overdue ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{f.status === 'pending' && overdue ? 'overdue' : f.status}</span>
+              <span className="text-xs text-slate-500">Due {new Date(f.due_at).toLocaleString()}</span>
+              {f.note && <span className="text-xs text-slate-600">{f.note}</span>}
+              {f.status === 'pending' && can('leads.followups') && (
+                <button className="ml-auto rounded bg-emerald-600 px-2 py-1 text-xs text-white" onClick={async () => { try { await followUpComplete(orgId, f.id); load(); } catch (e: any) { setError(e.message); } }}>Mark done</button>
+              )}
+            </div>
+          );
+        })}
+        {items.length === 0 && <p className="text-sm text-slate-500">Nothing here.</p>}
+      </div>
+    </div>
+  );
+}
+
+function LeadSetupTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [stages, setStages] = useState<LeadStage[]>([]);
+  const [rules, setRules] = useState<any[]>([]);
+  const [membersList, setMembersList] = useState<any[]>([]);
+  const [stageName, setStageName] = useState('');
+  const [rule, setRule] = useState({ match_type: 'city', match_value: '', assign_to_user_id: '' });
+  const load = () => {
+    leadStages(orgId).then(setStages).catch(e => setError(e.message));
+    if (can('leads.configure')) leadRules(orgId).then(setRules).catch(() => {});
+    members(orgId).then(m => setMembersList(m.filter(x => x.status === 'active'))).catch(() => {});
+  };
+  useEffect(() => { load(); }, [orgId]);
+  const input = 'rounded border px-2 py-1.5 text-sm';
+  return (
+    <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <div className="rounded-xl bg-white p-4 shadow-sm">
+        <h3 className="font-semibold">Pipeline stages</h3>
+        <ol className="mt-2 list-decimal pl-5 text-sm">
+          {stages.map(s => <li key={s.id}>{s.name} {s.is_won && <span className="text-emerald-600">(won)</span>} {s.is_lost && <span className="text-red-600">(lost)</span>}</li>)}
+        </ol>
+        {can('leads.configure') && (
+          <div className="mt-3 flex gap-2">
+            <input className={input} placeholder="New stage name" value={stageName} onChange={e => setStageName(e.target.value)} />
+            <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" onClick={async () => { if (!stageName) return; try { await leadStageCreate(orgId, { name: stageName }); setStageName(''); load(); } catch (e: any) { setError(e.message); } }}>Add stage</button>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-slate-400">New leads are auto-assigned by round-robin across sales agents unless a rule below matches.</p>
+      </div>
+      <div className="rounded-xl bg-white p-4 shadow-sm">
+        <h3 className="font-semibold">Assignment rules</h3>
+        {!can('leads.configure') && <p className="text-sm text-slate-400">Only workspace admins can change assignment rules.</p>}
+        {rules.map(r => (
+          <div key={r.id} className="mt-2 flex items-center gap-2 text-sm">
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{r.match_type}{r.match_value ? `: ${r.match_value}` : ''}</span>
+            <span>→ {r.assignee?.name ?? 'user'}</span>
+            {can('leads.configure') && <button className="ml-auto text-xs text-red-600" onClick={async () => { try { await leadRuleDelete(orgId, r.id); load(); } catch (e: any) { setError(e.message); } }}>Delete</button>}
+          </div>
+        ))}
+        {can('leads.configure') && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <select className={input} value={rule.match_type} onChange={e => setRule({ ...rule, match_type: e.target.value })}>
+              <option value="city">City matches</option>
+              <option value="property_type">Property type matches</option>
+              <option value="source">Source key is</option>
+              <option value="default">Default (all other leads)</option>
+            </select>
+            <input className={input} placeholder="Match value (e.g. Lahore)" value={rule.match_value} onChange={e => setRule({ ...rule, match_value: e.target.value })} />
+            <select className={input} value={rule.assign_to_user_id} onChange={e => setRule({ ...rule, assign_to_user_id: e.target.value })}>
+              <option value="">Assign to…</option>
+              {membersList.map(m => <option key={m.user?.id ?? m.user_id} value={m.user?.id ?? m.user_id}>{m.user?.name ?? m.name}</option>)}
+            </select>
+            <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white" onClick={async () => {
+              if (!rule.assign_to_user_id) return;
+              try { await leadRuleCreate(orgId, { match_type: rule.match_type, match_value: rule.match_value || null, assign_to_user_id: Number(rule.assign_to_user_id) }); setRule({ match_type: 'city', match_value: '', assign_to_user_id: '' }); load(); } catch (e: any) { setError(e.message); }
+            }}>Add rule</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

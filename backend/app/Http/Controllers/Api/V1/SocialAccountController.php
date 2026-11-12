@@ -90,6 +90,29 @@ class SocialAccountController extends Controller
         return response()->json(['data' => ['message' => 'Account disconnected. Its stored token was deleted.']]);
     }
 
+    /** Install the app on this Page for leadgen webhook events (Phase 4). */
+    public function subscribeLeads(Request $request, Organization $organization, SocialAccount $account, \App\Services\Meta\MetaGraphClient $graph)
+    {
+        $this->guardAccount($organization, $account);
+        abort_unless($request->user()->can('social.connect'), 403);
+        abort_unless($account->platform->key === 'facebook', 422, 'Lead subscriptions apply to Facebook Pages.');
+        $token = $account->token?->access_token;
+        if (!$token) {
+            return response()->json(['error' => ['code' => 'no_token', 'message' => 'Page has no stored token; reconnect it first.']], 422);
+        }
+        try {
+            $graph->subscribePageToLeadgen($account->external_id, $token);
+        } catch (MetaApiException $e) {
+            return response()->json(['error' => ['code' => 'subscribe_failed', 'message' => $e->getMessage()]], 502);
+        }
+        \App\Models\SocialAccountLog::create([
+            'organization_id' => $organization->id, 'social_account_id' => $account->id,
+            'user_id' => $request->user()->id, 'event' => 'leads_subscribed',
+            'message' => 'App installed on Page for leadgen webhook events.',
+        ]);
+        return response()->json(['data' => ['message' => 'Subscribed: new Meta Lead Ads leads will arrive by webhook.']]);
+    }
+
     public function logs(Request $request, Organization $organization)
     {
         abort_unless($request->user()->can('social.view'), 403);

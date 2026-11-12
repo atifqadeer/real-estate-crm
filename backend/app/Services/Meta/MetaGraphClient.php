@@ -167,6 +167,43 @@ class MetaGraphClient
         return (string) $body['h'];
     }
 
+    // ---- Lead Ads (Phase 4; endpoints verified in docs/09) ----
+
+    /** Retrieve one lead by its leadgen id. Requires leads_retrieval. */
+    public function fetchLead(string $leadgenId, string $token): array
+    {
+        return $this->getWithToken("/{$leadgenId}", [
+            'fields' => 'created_time,id,ad_id,adgroup_id,campaign_id,form_id,field_data',
+        ], $token);
+    }
+
+    /** List leads of a lead ad form (Bulk Read edge), one page of results. */
+    public function formLeads(string $formId, string $token, ?string $after = null): array
+    {
+        $params = ['fields' => 'created_time,id,ad_id,form_id,field_data', 'limit' => 100];
+        if ($after) $params['after'] = $after;
+        return $this->getWithToken("/{$formId}/leads", $params, $token);
+    }
+
+    /** Install the app on a Page for the leadgen webhook field. */
+    public function subscribePageToLeadgen(string $pageId, string $pageToken): array
+    {
+        return $this->post("/{$pageId}/subscribed_apps", [
+            'subscribed_fields' => 'leadgen',
+            'access_token' => $pageToken,
+        ]);
+    }
+
+    public function fetchAdName(string $adId, string $token): ?string
+    {
+        try {
+            $node = $this->getWithToken("/{$adId}", ['fields' => 'name'], $token);
+            return $node['name'] ?? null;
+        } catch (MetaApiException) {
+            return null; // attribution nicety only
+        }
+    }
+
     /**
      * Permanent errors must not be retried (auth, permission, validation,
      * policy). Rate limits and server faults are transient.

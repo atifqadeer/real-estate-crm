@@ -41,7 +41,8 @@ return [
         'app_secret' => env('META_APP_SECRET'),
         'redirect' => env('META_REDIRECT_URI'),
         'graph_version' => env('META_GRAPH_VERSION', 'v27.0'),
-        'scopes' => env('META_SCOPES', 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish'),
+        'scopes' => env('META_SCOPES', 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,leads_retrieval'),
+        'webhook_verify_token' => env('META_WEBHOOK_VERIFY_TOKEN'),
         'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
     ],
 

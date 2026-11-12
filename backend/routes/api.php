@@ -7,7 +7,14 @@ use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\ContentPostController;
 use App\Http\Controllers\Api\V1\ContentTemplateController;
+use App\Http\Controllers\Api\V1\LeadAssignmentRuleController;
+use App\Http\Controllers\Api\V1\LeadCatalogController;
+use App\Http\Controllers\Api\V1\LeadController;
+use App\Http\Controllers\Api\V1\LeadFollowUpController;
+use App\Http\Controllers\Api\V1\LeadFormController;
+use App\Http\Controllers\Api\V1\LeadImportController;
 use App\Http\Controllers\Api\V1\MediaController;
+use App\Http\Controllers\Api\V1\MetaWebhookController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +25,12 @@ Route::prefix('v1')->group(function () {
     Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept'])->middleware('throttle:10,1');
     // Meta returns the browser here after OAuth; identity is proven by the one-time state value.
     Route::get('/social/meta/callback', [SocialAccountController::class, 'callback'])->middleware('throttle:30,1');
+    // Meta Webhooks (Phase 4): verification handshake + leadgen events (signature-checked).
+    Route::get('/webhooks/meta', [MetaWebhookController::class, 'verify']);
+    Route::post('/webhooks/meta', [MetaWebhookController::class, 'receive']);
+    // Public website lead forms (Phase 4): honeypot + per-IP throttle inside.
+    Route::get('/public/forms/{publicKey}', [LeadFormController::class, 'publicShow']);
+    Route::post('/public/forms/{publicKey}/submit', [LeadFormController::class, 'publicSubmit'])->middleware('throttle:30,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -71,6 +84,34 @@ Route::prefix('v1')->group(function () {
             Route::put('/organizations/{organization}/templates/{template}', [ContentTemplateController::class, 'update']);
             Route::delete('/organizations/{organization}/templates/{template}', [ContentTemplateController::class, 'destroy']);
             Route::post('/organizations/{organization}/templates/seed-starters', [ContentTemplateController::class, 'seedStarters']);
+            Route::post('/organizations/{organization}/social/accounts/{account}/subscribe-leads', [SocialAccountController::class, 'subscribeLeads']);
+            // Phase 4: lead generation
+            Route::get('/organizations/{organization}/leads/my-summary', [LeadController::class, 'mySummary']);
+            Route::get('/organizations/{organization}/leads', [LeadController::class, 'index']);
+            Route::post('/organizations/{organization}/leads', [LeadController::class, 'store']);
+            Route::get('/organizations/{organization}/leads/{lead}', [LeadController::class, 'show']);
+            Route::put('/organizations/{organization}/leads/{lead}', [LeadController::class, 'update']);
+            Route::delete('/organizations/{organization}/leads/{lead}', [LeadController::class, 'destroy']);
+            Route::post('/organizations/{organization}/leads/{lead}/notes', [LeadController::class, 'addNote']);
+            Route::post('/organizations/{organization}/leads/meta/backfill', [LeadController::class, 'metaBackfill']);
+            Route::get('/organizations/{organization}/lead-stages', [LeadCatalogController::class, 'stages']);
+            Route::post('/organizations/{organization}/lead-stages', [LeadCatalogController::class, 'storeStage']);
+            Route::delete('/organizations/{organization}/lead-stages/{stage}', [LeadCatalogController::class, 'destroyStage']);
+            Route::get('/organizations/{organization}/lead-sources', [LeadCatalogController::class, 'sources']);
+            Route::post('/organizations/{organization}/lead-sources', [LeadCatalogController::class, 'storeSource']);
+            Route::get('/organizations/{organization}/lead-forms', [LeadFormController::class, 'index']);
+            Route::post('/organizations/{organization}/lead-forms', [LeadFormController::class, 'store']);
+            Route::put('/organizations/{organization}/lead-forms/{form}', [LeadFormController::class, 'update']);
+            Route::delete('/organizations/{organization}/lead-forms/{form}', [LeadFormController::class, 'destroy']);
+            Route::get('/organizations/{organization}/lead-imports', [LeadImportController::class, 'index']);
+            Route::post('/organizations/{organization}/lead-imports', [LeadImportController::class, 'store']);
+            Route::get('/organizations/{organization}/lead-rules', [LeadAssignmentRuleController::class, 'index']);
+            Route::post('/organizations/{organization}/lead-rules', [LeadAssignmentRuleController::class, 'store']);
+            Route::delete('/organizations/{organization}/lead-rules/{rule}', [LeadAssignmentRuleController::class, 'destroy']);
+            Route::get('/organizations/{organization}/follow-ups', [LeadFollowUpController::class, 'index']);
+            Route::post('/organizations/{organization}/follow-ups', [LeadFollowUpController::class, 'store']);
+            Route::post('/organizations/{organization}/follow-ups/{followUp}/complete', [LeadFollowUpController::class, 'complete']);
+            Route::post('/organizations/{organization}/follow-ups/{followUp}/cancel', [LeadFollowUpController::class, 'cancel']);
         });
     });
 });

@@ -11,7 +11,7 @@ class ClientSetting extends Model
 
     protected $fillable = [
         'organization_id', 'default_lead_pipeline', 'approval_rules',
-        'notification_settings', 'lead_assignment_mode', 'data_retention_days',
+        'notification_settings', 'lead_assignment_mode', 'data_retention_days', 'settings',
     ];
 
     protected function casts(): array
@@ -20,6 +20,7 @@ class ClientSetting extends Model
             'default_lead_pipeline' => 'array',
             'approval_rules' => 'array',
             'notification_settings' => 'array',
+            'settings' => 'array',
         ];
     }
 

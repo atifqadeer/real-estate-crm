@@ -25,21 +25,23 @@ class RoleProvisioner
         'content.view', 'content.create', 'content.edit', 'content.delete', 'content.submit',
         'content.approve', 'content.publish', 'content.schedule',
         'media.view', 'media.upload', 'media.delete',
+        'leads.view', 'leads.create', 'leads.edit', 'leads.delete', 'leads.import',
+        'leads.assign', 'leads.forms', 'leads.followups', 'leads.configure',
     ];
 
     public const ROLE_PERMISSIONS = [
         'super_admin' => '*',
         'agency_admin' => ['organizations.view', 'organizations.create', 'organizations.update', 'members.view', 'members.invite', 'members.update', 'members.remove', 'settings.view', 'settings.update', 'audit.view', 'dashboard.view'],
-        'agency_marketing_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'social.disconnect', 'content.view', 'content.create', 'content.edit', 'content.delete', 'content.submit', 'content.publish', 'content.schedule', 'media.view', 'media.upload', 'media.delete'],
-        'agency_marketing_executive' => ['organizations.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'content.view', 'content.create', 'content.edit', 'content.submit', 'content.publish', 'content.schedule', 'media.view', 'media.upload'],
-        'agency_account_manager' => ['organizations.view', 'members.view', 'members.invite', 'settings.view', 'settings.update', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'content.view', 'content.create', 'content.edit', 'content.submit', 'content.approve', 'content.publish', 'content.schedule', 'media.view', 'media.upload'],
-        'agency_analyst' => ['organizations.view', 'audit.view', 'dashboard.view', 'social.view', 'content.view', 'media.view'],
+        'agency_marketing_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'social.disconnect', 'content.view', 'content.create', 'content.edit', 'content.delete', 'content.submit', 'content.publish', 'content.schedule', 'media.view', 'media.upload', 'media.delete', 'leads.view'],
+        'agency_marketing_executive' => ['organizations.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'content.view', 'content.create', 'content.edit', 'content.submit', 'content.publish', 'content.schedule', 'media.view', 'media.upload', 'leads.view'],
+        'agency_account_manager' => ['organizations.view', 'members.view', 'members.invite', 'settings.view', 'settings.update', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'content.view', 'content.create', 'content.edit', 'content.submit', 'content.approve', 'content.publish', 'content.schedule', 'media.view', 'media.upload', 'leads.view', 'leads.create', 'leads.edit', 'leads.assign', 'leads.followups'],
+        'agency_analyst' => ['organizations.view', 'audit.view', 'dashboard.view', 'social.view', 'content.view', 'media.view', 'leads.view'],
         'client_owner' => '*',
-        'client_admin' => ['organizations.view', 'organizations.update', 'members.view', 'members.invite', 'members.update', 'members.remove', 'settings.view', 'settings.update', 'audit.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'social.disconnect', 'content.view', 'content.create', 'content.edit', 'content.delete', 'content.submit', 'content.approve', 'content.publish', 'content.schedule', 'media.view', 'media.upload', 'media.delete'],
+        'client_admin' => ['organizations.view', 'organizations.update', 'members.view', 'members.invite', 'members.update', 'members.remove', 'settings.view', 'settings.update', 'audit.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'social.disconnect', 'content.view', 'content.create', 'content.edit', 'content.delete', 'content.submit', 'content.approve', 'content.publish', 'content.schedule', 'media.view', 'media.upload', 'media.delete', 'leads.view', 'leads.create', 'leads.edit', 'leads.delete', 'leads.import', 'leads.assign', 'leads.forms', 'leads.followups', 'leads.configure'],
         'client_marketing_approver' => ['organizations.view', 'members.view', 'dashboard.view', 'social.view', 'content.view', 'content.approve', 'media.view'],
-        'client_sales_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view', 'content.view'],
-        'client_sales_agent' => ['organizations.view', 'dashboard.view'],
-        'client_readonly' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view'],
+        'client_sales_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view', 'content.view', 'leads.view', 'leads.create', 'leads.edit', 'leads.delete', 'leads.import', 'leads.assign', 'leads.forms', 'leads.followups', 'leads.configure'],
+        'client_sales_agent' => ['organizations.view', 'dashboard.view', 'leads.view', 'leads.create', 'leads.edit', 'leads.followups'],
+        'client_readonly' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view', 'content.view', 'media.view', 'leads.view'],
     ];
 
     public function ensurePermissions(): void

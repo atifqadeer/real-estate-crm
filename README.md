@@ -5,7 +5,18 @@ serving real estate agencies, brokers and developers in Pakistan.
 Built phase by phase from the complete project prompt
 (`Real_Estate_Marketing_Agency_CRM_Complete_Prompt.txt`, 2026-11-12).
 
-**Current status: Phase 3 — Content & Publishing COMPLETE in code (2026-11-12)**
+**Current status: Phase 4 — Lead Generation COMPLETE in code (2026-11-12)**
+Full lead model (pipeline stages, sources, touchpoints, activity
+timeline, custom fields), one deduplicating ingestion path for manual
+entry, CSV/XLSX import with outcome reports, public website forms
+(honeypot + throttling + UTM capture), Meta Lead Ads webhooks
+(verification handshake, HMAC signature check, queued retrieval,
+redelivery-safe) with per-Page subscription and form backfill,
+assignment rules + round-robin with agent dashboards, and follow-ups
+with due/overdue views. 40 tests green (Graph API faked; live lead flow
+needs the Meta app setup — see `docs/09-PHASE4-LEADS.md`).
+
+**Phase 3 — Content & Publishing COMPLETE in code (2026-11-12)**
 Post composer with per-destination overrides and previews, media library,
 approval workflow (per-post flag or workspace rule, enforced before any
 publish/schedule), Facebook + Instagram publishing adapters, independent

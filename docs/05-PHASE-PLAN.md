@@ -29,10 +29,12 @@ Delivered: see docs/08. 10 Phase 3 tests green. Live publishing still
 needs the Phase 2 externals (Meta app credentials + Advanced Access)
 and publicly reachable media URLs.
 
-## Phase 4 — Lead Generation
+## Phase 4 — Lead Generation — ✅ DONE 2026-11-12 (code + mocked-API tests)
 Lead model + statuses · manual + CSV/XLSX import · website forms ·
 Meta Lead Ads webhooks (signature verified, deduped) · assignment rules ·
-follow-up reminders.
+follow-up reminders. Delivered: see docs/09. 10 Phase 4 tests green.
+Live lead flow needs the Phase 2 externals (Meta app + Advanced Access
+incl. leads_retrieval) and META_WEBHOOK_VERIFY_TOKEN set.
 
 ## Phase 5 — CRM & Communication
 Kanban pipeline · lead detail/timeline · agent dashboards · WhatsApp
