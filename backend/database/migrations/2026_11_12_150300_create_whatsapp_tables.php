@@ -45,7 +45,8 @@ return new class extends Migration {
             $t->timestamp('last_message_at')->nullable();
             $t->timestamp('opted_out_at')->nullable();
             $t->timestamps();
-            $t->unique(['whatsapp_account_id', 'contact_phone_e164']);
+            // Explicit short name: MySQL's 64-char identifier limit (auto name is 68).
+            $t->unique(['whatsapp_account_id', 'contact_phone_e164'], 'whatsapp_conversations_account_phone_unique');
         });
         Schema::create('whatsapp_messages', function (Blueprint $t) {
             $t->id();

@@ -20,7 +20,9 @@ return new class extends Migration {
             $t->json('metadata')->nullable();
             $t->timestamps();
             $t->softDeletes();
-            $t->unique(['organization_id', 'social_platform_id', 'external_id']);
+            // Explicit short name: MySQL identifiers are limited to 64 chars
+            // (the auto-generated name for this set is 69).
+            $t->unique(['organization_id', 'social_platform_id', 'external_id'], 'social_accounts_org_platform_ext_unique');
             $t->index(['organization_id', 'status']);
         });
     }

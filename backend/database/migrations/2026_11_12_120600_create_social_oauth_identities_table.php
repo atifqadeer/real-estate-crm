@@ -19,7 +19,8 @@ return new class extends Migration {
             $t->json('scopes')->nullable();
             $t->foreignId('connected_by')->nullable()->constrained('users')->nullOnDelete();
             $t->timestamps();
-            $t->unique(['organization_id', 'provider', 'external_user_id']);
+            // Explicit short name: MySQL's 64-char identifier limit (auto name is 72).
+            $t->unique(['organization_id', 'provider', 'external_user_id'], 'social_oauth_identities_org_provider_user_unique');
         });
     }
     public function down(): void { Schema::dropIfExists('social_oauth_identities'); }
