@@ -1,8 +1,8 @@
 # 13 — Run the CRM on your own PC (Windows, localhost)
 
-No MySQL or Docker needed for a local trial — the project runs on
-SQLite out of the box (`.env.example` already defaults to it). You need
-three free tools installed once: PHP, Composer, Node.js.
+The project runs on SQLite out of the box, or on MySQL 8 if you prefer
+(see "Using MySQL instead of SQLite" below). You need three free tools
+installed once: PHP, Composer, Node.js.
 
 ## Step 1 — Install PHP 8.4
 
@@ -77,6 +77,51 @@ Open **http://localhost:5173** in your browser.
 - `owner@clienta.demo` — Client A owner
 - `owner@clientb.demo` — Client B owner
 - `multi@demo.pk` — member of both clients (tenant-isolation demo)
+
+## Using MySQL instead of SQLite
+
+Skip the `New-Item database\database.sqlite` line in Step 4, and do
+this instead:
+
+1. **Install MySQL Server 8:** download the **MySQL Installer** from
+   https://dev.mysql.com/downloads/installer/ and run it. Choose
+   "Server only" (or Developer Default), install MySQL Server 8.x,
+   keep port **3306**, set a root password (note it down), and let it
+   install as a Windows Service that starts automatically.
+2. **Enable the PHP driver:** in `C:\php\php.ini` also remove the `;`
+   before `extension=pdo_mysql`, then close/reopen PowerShell.
+3. **Create the database** — open PowerShell:
+   ```powershell
+   & "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" -u root -p
+   ```
+   (adjust `8.4` to your installed version), enter the root password,
+   then run:
+   ```sql
+   CREATE DATABASE real_estate_crm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER 'crm'@'localhost' IDENTIFIED BY 'choose-a-password';
+   GRANT ALL PRIVILEGES ON real_estate_crm.* TO 'crm'@'localhost';
+   FLUSH PRIVILEGES;
+   exit
+   ```
+4. **Point the app at MySQL:** in `backend\.env` set:
+   ```
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=real_estate_crm
+   DB_USERNAME=crm
+   DB_PASSWORD=choose-a-password
+   ```
+5. **Check and migrate** (in the backend folder):
+   ```powershell
+   php artisan db:show
+   php artisan migrate:fresh --seed
+   ```
+   `db:show` should report a MySQL connection; then start the three
+   windows exactly as in Steps 4–6. Everything else (logins, data) is
+   the same — your data now lives in MySQL, and switching back to
+   SQLite later just means changing `.env` again (the two databases do
+   not share data).
 
 ## Notes
 
