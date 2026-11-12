@@ -1,0 +1,20 @@
+# Local infrastructure for machines WITH Docker (the build VM has none).
+# The app itself runs on the host: php artisan serve + npm run dev.
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: agency_crm
+      MYSQL_USER: agency
+      MYSQL_PASSWORD: agency_secret
+      MYSQL_ROOT_PASSWORD: root_secret
+    ports: ["3306:3306"]
+    volumes: ["mysql_data:/var/lib/mysql"]
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]
+volumes:
+  mysql_data:
