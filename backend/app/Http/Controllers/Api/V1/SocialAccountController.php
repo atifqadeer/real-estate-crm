@@ -43,13 +43,32 @@ class SocialAccountController extends Controller
     public function connect(Request $request, Organization $organization, string $platform, MetaConnectionService $connections)
     {
         abort_unless($request->user()->can('social.connect'), 403);
-        abort_unless(in_array($platform, ['facebook', 'instagram'], true), 404, 'This platform has no shipped adapter yet.');
+        abort_unless(in_array($platform, ['facebook', 'instagram', 'linkedin'], true), 404, 'This platform has no shipped adapter yet.');
+        app(\App\Services\Billing\PlanLimitService::class)->assertCan($organization, 'max_social_accounts');
         try {
-            $url = $connections->startAuthorization($organization, $request->user(), $request->boolean('rerequest'));
-        } catch (MetaApiException $e) {
-            return response()->json(['error' => ['code' => 'meta_not_configured', 'message' => $e->getMessage()]], 503);
+            $url = $platform === 'linkedin'
+                ? app(\App\Services\LinkedIn\LinkedInConnectionService::class)->startAuthorization($organization, $request->user())
+                : $connections->startAuthorization($organization, $request->user(), $request->boolean('rerequest'));
+        } catch (MetaApiException | \App\Services\LinkedIn\LinkedInApiException $e) {
+            return response()->json(['error' => ['code' => 'provider_not_configured', 'message' => $e->getMessage()]], 503);
         }
         return response()->json(['data' => ['url' => $url]]);
+    }
+
+    /** LinkedIn OAuth callback (public, one-time state in cache). */
+    public function linkedInCallback(Request $request)
+    {
+        $frontend = rtrim((string) config('services.linkedin.frontend_url'), '/');
+        if ($request->filled('error')) {
+            return redirect()->away($frontend . '/?linkedin=denied&message=' . urlencode((string) $request->input('error_description', 'Authorization was declined.')));
+        }
+        try {
+            $result = app(\App\Services\LinkedIn\LinkedInConnectionService::class)
+                ->handleCallback((string) $request->input('code'), (string) $request->input('state'));
+        } catch (\Throwable $e) {
+            return redirect()->away($frontend . '/?linkedin=error&message=' . urlencode($e->getMessage()));
+        }
+        return redirect()->away($frontend . '/?linkedin=connected&accounts=' . $result['accounts']);
     }
 
     /**
@@ -77,6 +96,19 @@ class SocialAccountController extends Controller
     {
         $this->guardAccount($organization, $account);
         abort_unless($request->user()->can('social.test'), 403);
+        if ($account->platform->key === 'linkedin') {
+            try {
+                app(\App\Services\LinkedIn\LinkedInConnectionService::class)->testAccount($account);
+                $account->update(['status' => 'connected', 'last_error' => null, 'last_synced_at' => now()]);
+            } catch (\App\Services\LinkedIn\LinkedInApiException $e) {
+                $account->update([
+                    'status' => $e->status === 401 ? 'expired' : 'error',
+                    'last_error' => $e->getMessage(),
+                ]);
+            }
+            $account->load(['platform', 'token', 'permissions', 'connectedBy:id,name']);
+            return response()->json(['data' => $this->payload($account)]);
+        }
         $account = $connections->testAccount($account, $request->user());
         if ($account->status === 'expired') {
             $this->notifyAdmins($organization, 'social.token_expired',

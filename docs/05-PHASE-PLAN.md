@@ -29,6 +29,16 @@ Delivered: see docs/08. 10 Phase 3 tests green. Live publishing still
 needs the Phase 2 externals (Meta app credentials + Advanced Access)
 and publicly reachable media URLs.
 
+## Phase 7 — Advanced Integrations & Commercialization — ✅ DONE 2026-11-12 (code + mocked-API tests)
+LinkedIn Company Pages connect + Posts API publishing (ADMINISTRATOR
+discovery, Community Management API gate documented) · TikTok/X/
+YouTube/Pinterest/Google Ads/property portals evaluated with verified
+gates and deliberately not shipped (docs/12) · AI content assistant
+(provider-agnostic, guardrailed, review-marked, never auto-publishes) ·
+subscription packages + plan-limit enforcement + manual invoicing ·
+white-label branding · previous-period analytics comparison.
+11 Phase 7 tests green; full suite 72.
+
 ## Phase 6 — Campaigns & Analytics — ✅ DONE 2026-11-12 (code + mocked-API tests)
 Campaign module (ad groups/ads, daily spend manual + Meta Ads insights
 sync with ads_read, idempotent) · attribution (manual/Meta-id/UTM,

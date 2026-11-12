@@ -18,6 +18,8 @@ import {
   campaignList, campaignGet, campaignCreate, campaignUpdate, campaignDelete, campaignAddSpend,
   campaignDeleteSpend, campaignAddGroup, campaignAddAd, campaignCompare, campaignSyncMeta,
   analyticsOverview, analyticsAgency, analyticsExportDownload,
+  billingOverview, billingPackages, billingPackageCreate, billingPackageDelete, billingSubscriptions,
+  billingSubscribe, billingSubscriptionStatus, billingInvoiceCreate, billingInvoiceUpdate, aiSuggest,
   type Me, type Dashboard, type SocialPlatform, type SocialAccount,
   type MediaAsset, type ContentPost, type Destination, type ContentTemplate,
   type Lead, type LeadStage, type LeadSourceT, type LeadFormT, type FollowUp,
@@ -27,7 +29,7 @@ import {
 } from './api';
 
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
-type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'whatsapp' | 'campaigns' | 'analytics' | 'members' | 'settings' | 'audit';
+type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'whatsapp' | 'campaigns' | 'analytics' | 'billing' | 'members' | 'settings' | 'audit';
 
 const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
@@ -38,6 +40,7 @@ const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'whatsapp', label: 'WhatsApp Inbox', permission: 'whatsapp.view' },
   { id: 'campaigns', label: 'Campaigns', permission: 'campaigns.view' },
   { id: 'analytics', label: 'Analytics', permission: 'analytics.view' },
+  { id: 'billing', label: 'Billing & Packages', permission: 'billing.view' },
   { id: 'members', label: 'Users and Roles', permission: 'members.view' },
   { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
   { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
@@ -69,12 +72,23 @@ export default function App() {
   const perms = membership?.permissions ?? [];
   const can = (p: string) => perms.includes(p);
 
+  // White-label branding (Phase 7): workspace brand name / logo / color.
+  const [branding, setBranding] = useState<{ brand_name?: string; logo_url?: string; primary_color?: string }>({});
+  useEffect(() => {
+    if (!membership) return;
+    if (!can('settings.view')) { setBranding({}); return; }
+    getSettings(membership.organization_id)
+      .then((s: any) => setBranding(s?.settings?.branding ?? {}))
+      .catch(() => setBranding({}));
+  }, [membership?.organization_id]);
+
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900">
-      <aside className="w-64 shrink-0 bg-slate-900 text-slate-100 p-4 flex flex-col gap-4">
+      <aside className="w-64 shrink-0 text-slate-100 p-4 flex flex-col gap-4" style={{ backgroundColor: branding.primary_color ?? '#0f172a' }}>
         <div>
-          <div className="text-lg font-bold">Agency CRM</div>
-          <div className="text-xs text-slate-400">Real Estate Marketing · Pakistan</div>
+          {branding.logo_url && <img src={branding.logo_url} alt="" className="mb-1 h-9 w-auto rounded bg-white/90 p-0.5" />}
+          <div className="text-lg font-bold">{branding.brand_name ?? 'Agency CRM'}</div>
+          <div className="text-xs text-slate-300/80">Real Estate Marketing · Pakistan</div>
         </div>
         <label className="text-xs text-slate-400">Workspace
           <select className="mt-1 w-full rounded bg-slate-800 p-2 text-sm text-white"
@@ -109,6 +123,8 @@ export default function App() {
         {membership && view === 'whatsapp' && <WhatsAppView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'campaigns' && <CampaignsView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'analytics' && <AnalyticsView orgId={membership.organization_id} orgType={membership.type} can={can} setError={setError} />}
+        {membership && view === 'billing' && <BillingView orgId={membership.organization_id} orgType={membership.type} can={can} setError={setError}
+          clientOptions={user.memberships.filter(m => m.type === 'real_estate_client').map(m => ({ id: m.organization_id, business_name: m.business_name }))} />}
         {membership && view === 'clients' && <ClientsView user={user} canCreate={can('organizations.create')} setError={setError}
           onCreated={() => me().then(setUser)} />}
         {membership && view === 'members' && <MembersView orgId={membership.organization_id} canInvite={can('members.invite')} setError={setError} />}
@@ -213,9 +229,20 @@ function SettingsView({ orgId, canUpdate, setError }: { orgId: number; canUpdate
   const [s, setS] = useState<any>(null);
   useEffect(() => { getSettings(orgId).then(setS).catch(e => setError(e.message)); }, [orgId]);
   if (!s) return <p>Loading…</p>;
+  const branding = s.settings?.branding ?? {};
+  const setBranding = (patch: any) => setS({ ...s, settings: { ...(s.settings ?? {}), branding: { ...branding, ...patch } } });
   return (
-    <form onSubmit={async e => { e.preventDefault(); try { await saveSettings(orgId, { lead_assignment_mode: s.lead_assignment_mode, data_retention_days: s.data_retention_days }); } catch (ex: any) { setError(ex.message); } }}>
+    <form onSubmit={async e => { e.preventDefault(); try { await saveSettings(orgId, { lead_assignment_mode: s.lead_assignment_mode, data_retention_days: s.data_retention_days, settings: s.settings }); } catch (ex: any) { setError(ex.message); } }}>
       <h2 className="text-2xl font-bold">Organization Settings</h2>
+      <fieldset className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+        <legend className="px-1 text-sm font-semibold">White-label branding</legend>
+        <label className="mt-1 block text-sm">Brand name (shown in the sidebar instead of "Agency CRM")
+          <input disabled={!canUpdate} className="mt-1 w-full rounded border p-2" placeholder="e.g. Acme Properties CRM" value={branding.brand_name ?? ''} onChange={e => setBranding({ brand_name: e.target.value })} /></label>
+        <label className="mt-3 block text-sm">Logo URL
+          <input disabled={!canUpdate} className="mt-1 w-full rounded border p-2" placeholder="https://…" value={branding.logo_url ?? ''} onChange={e => setBranding({ logo_url: e.target.value })} /></label>
+        <label className="mt-3 block text-sm">Primary color
+          <input disabled={!canUpdate} type="color" className="mt-1 h-10 w-24 rounded border p-1" value={branding.primary_color ?? '#0f172a'} onChange={e => setBranding({ primary_color: e.target.value })} /></label>
+      </fieldset>
       <label className="mt-4 block text-sm">Lead assignment mode
         <select disabled={!canUpdate} className="mt-1 rounded border p-2" value={s.lead_assignment_mode} onChange={e => setS({ ...s, lead_assignment_mode: e.target.value })}>
           {['manual','round_robin','location','category'].map(m => <option key={m}>{m}</option>)}
@@ -515,6 +542,11 @@ function Composer({ orgId, initial, templateSeed, setError, onDone }: {
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <label className="text-sm md:col-span-2">Internal title<input className={input} value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. DHA Phase 6 listing — launch" /></label>
         <label className="text-sm md:col-span-2">Caption<textarea className={input} rows={5} value={form.caption} onChange={e => set('caption', e.target.value)} /></label>
+        <AiAssistantPanel orgId={orgId} setError={setError} onUse={(caption, hashtags, cta) => {
+          set('caption', caption);
+          if (hashtags) set('hashtags', hashtags);
+          if (cta) set('cta_text', cta);
+        }} />
         <label className="text-sm">Hashtags<input className={input} value={form.hashtags} onChange={e => set('hashtags', e.target.value)} placeholder="#RealEstate #Lahore" /></label>
         <label className="text-sm">Website / property URL<input className={input} value={form.link_url} onChange={e => set('link_url', e.target.value)} /></label>
         <label className="text-sm">Call to action<input className={input} value={form.cta_text} onChange={e => set('cta_text', e.target.value)} placeholder="Call now / Book a viewing" /></label>
@@ -1689,6 +1721,15 @@ function AnalyticsView({ orgId, orgType, can, setError }: { orgId: number; orgTy
         <span className="ml-2 self-center text-xs text-slate-400">{overview ? `${overview.range.from} → ${overview.range.to}` : ''}</span>
       </div>
 
+      {overview?.previous_period && (
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 rounded-xl bg-white px-4 py-2 text-sm shadow-sm">
+          <span className="text-slate-500">vs previous period ({overview.previous_period.range.from} → {overview.previous_period.range.to}):</span>
+          {([['Leads', 'leads'], ['Qualified', 'qualified'], ['Won', 'won'], ['Spend', 'spend']] as const).map(([label, key]) => {
+            const d = overview.previous_period.deltas_percent[key];
+            return <span key={key}>{label} <b className={d === null ? '' : d >= 0 ? 'text-emerald-600' : 'text-red-600'}>{d === null ? 'n/a' : `${d > 0 ? '+' : ''}${d}%`}</b></span>;
+          })}
+        </div>
+      )}
       {overview && (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1771,6 +1812,226 @@ function AnalyticsView({ orgId, orgType, can, setError }: { orgId: number; orgTy
           <h4 className="mt-3 text-sm font-semibold">Team workload (open tasks)</h4>
           {agency.team_workload.map((w: any) => <div key={w.member} className="flex justify-between text-sm"><span>{w.member}</span><b>{w.open_tasks}</b></div>)}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------- Phase 7: AI assistant + Billing ----------------
+
+function AiAssistantPanel({ orgId, setError, onUse }: {
+  orgId: number; setError: (s: string) => void;
+  onUse: (caption: string, hashtags: string, cta: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [prop, setProp] = useState({ title: '', property_type: '', city: '', area: '', price: '', bedrooms: '', features: '' });
+  const [language, setLanguage] = useState('en');
+  const [platform, setPlatform] = useState('facebook');
+  const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ caption: string; hashtags: string[]; cta: string }[]>([]);
+  const input = 'w-full rounded border px-2 py-1.5 text-sm';
+  if (!open) {
+    return (
+      <div className="md:col-span-2">
+        <button type="button" className="rounded border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm text-violet-800" onClick={() => setOpen(true)}>
+          ✨ AI caption assistant
+        </button>
+        <span className="ml-2 text-xs text-slate-400">Drafts are suggestions for your review — nothing AI-written is ever published automatically.</span>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 md:col-span-2">
+      <div className="flex items-center justify-between">
+        <b className="text-sm">AI caption assistant</b>
+        <button type="button" className="text-xs text-slate-500" onClick={() => setOpen(false)}>Close</button>
+      </div>
+      <p className="text-[11px] text-slate-500">Only the facts you enter are used — the assistant is instructed never to invent prices, features, approvals or availability.</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-3">
+        <label className="text-xs">Property title*<input className={input} value={prop.title} onChange={e => setProp({ ...prop, title: e.target.value })} placeholder="10 Marla House for Sale" /></label>
+        <label className="text-xs">Type<input className={input} value={prop.property_type} onChange={e => setProp({ ...prop, property_type: e.target.value })} placeholder="House / Apartment / Plot" /></label>
+        <label className="text-xs">Price (exact text)<input className={input} value={prop.price} onChange={e => setProp({ ...prop, price: e.target.value })} placeholder="PKR 4.5 Crore" /></label>
+        <label className="text-xs">City<input className={input} value={prop.city} onChange={e => setProp({ ...prop, city: e.target.value })} /></label>
+        <label className="text-xs">Area / society<input className={input} value={prop.area} onChange={e => setProp({ ...prop, area: e.target.value })} /></label>
+        <label className="text-xs">Bedrooms<input className={input} value={prop.bedrooms} onChange={e => setProp({ ...prop, bedrooms: e.target.value })} /></label>
+        <label className="text-xs md:col-span-3">Features (only real ones)<input className={input} value={prop.features} onChange={e => setProp({ ...prop, features: e.target.value })} placeholder="Near park, west open, …" /></label>
+        <label className="text-xs">Platform<select className={input} value={platform} onChange={e => setPlatform(e.target.value)}><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="linkedin">LinkedIn</option></select></label>
+        <label className="text-xs">Language<select className={input} value={language} onChange={e => setLanguage(e.target.value)}><option value="en">English</option><option value="ur">Urdu</option></select></label>
+        <div className="flex items-end">
+          <button type="button" disabled={busy || !prop.title} className="rounded bg-violet-600 px-3 py-1.5 text-sm text-white disabled:opacity-50" onClick={async () => {
+            setBusy(true);
+            try { const r = await aiSuggest(orgId, { platform, language, property: prop }); setSuggestions(r.suggestions); }
+            catch (e: any) { setError(e.message); }
+            setBusy(false);
+          }}>{busy ? 'Generating…' : suggestions.length ? 'Regenerate' : 'Generate captions'}</button>
+        </div>
+      </div>
+      {suggestions.map((s, i) => (
+        <div key={i} className="mt-2 rounded bg-white p-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="rounded bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">AI-GENERATED — REVIEW BEFORE USE</span>
+            <button type="button" className="text-xs text-emerald-700 underline" onClick={() => onUse(s.caption, (s.hashtags ?? []).join(' '), s.cta)}>Use this caption</button>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap text-sm">{s.caption}</p>
+          <p className="text-xs text-slate-500">{(s.hashtags ?? []).join(' ')}{s.cta ? ` · CTA: ${s.cta}` : ''}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BillingView({ orgId, orgType, can, setError, clientOptions }: {
+  orgId: number; orgType: string; can: (p: string) => boolean; setError: (s: string) => void;
+  clientOptions: { id: number; business_name: string }[];
+}) {
+  const [overview, setOverview] = useState<any>(null);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [pkgForm, setPkgForm] = useState({ name: '', price: '', max_leads_per_month: '', max_social_accounts: '', max_posts_per_month: '', max_users: '' });
+  const [assign, setAssign] = useState({ client_organization_id: '', service_package_id: '' });
+  const clients = clientOptions;
+  const [invoiceAmount, setInvoiceAmount] = useState('');
+  const input = 'rounded border px-2 py-1.5 text-sm';
+
+  const load = () => {
+    billingOverview(orgId).then(setOverview).catch(e => setError(e.message));
+    if (orgType === 'agency') {
+      billingPackages(orgId).then(setPackages).catch(() => undefined);
+      billingSubscriptions(orgId).then(setSubscriptions).catch(() => undefined);
+    }
+  };
+  useEffect(() => { load(); }, [orgId]);
+
+  const usageRow = (label: string, key: string) => {
+    const used = overview?.usage?.[key]; const limit = overview?.limits?.[key];
+    return (
+      <div key={key} className="flex items-center justify-between gap-3 text-sm">
+        <span>{label}</span>
+        <span className="flex items-center gap-2">
+          <span className="h-2 w-32 overflow-hidden rounded bg-slate-200">
+            <span className="block h-full bg-emerald-500" style={{ width: limit ? `${Math.min(100, (used / limit) * 100)}%` : '0%' }} />
+          </span>
+          <b>{used}</b><span className="text-slate-400">/ {limit ?? '∞'}</span>
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold">Billing & Packages</h2>
+
+      <div className="mt-3 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <h3 className="font-semibold">Current plan {overview?.subscription ? `— ${overview.subscription.package?.name}` : ''}</h3>
+          {overview?.subscription ? (
+            <p className="text-sm text-slate-500">
+              Status: <b>{overview.subscription.status}</b> · {overview.subscription.package?.currency} {overview.subscription.package?.price}/month
+              {overview.subscription.ends_at ? ` · period ends ${String(overview.subscription.ends_at).slice(0, 10)}` : ''}
+            </p>
+          ) : <p className="text-sm text-slate-500">No package assigned — this workspace is unlimited.</p>}
+          <div className="mt-3 flex flex-col gap-2">
+            {usageRow('Team members', 'max_users')}
+            {usageRow('Connected social accounts', 'max_social_accounts')}
+            {usageRow('Leads this month', 'max_leads_per_month')}
+            {usageRow('Posts this month', 'max_posts_per_month')}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">Limits are enforced only where the package sets them; blank = unlimited.</p>
+        </div>
+
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <h3 className="font-semibold">Invoices</h3>
+          {(overview?.invoices ?? []).length === 0 && <p className="text-sm text-slate-400">No invoices yet.</p>}
+          {(overview?.invoices ?? []).map((inv: any) => (
+            <div key={inv.id} className="flex items-center justify-between border-b py-1.5 text-sm last:border-0">
+              <span>{inv.number} · {inv.currency} {Number(inv.amount).toLocaleString('en-PK')} <span className="text-xs text-slate-400">due {inv.due_date ?? '—'}</span></span>
+              <span className="flex items-center gap-2">
+                <span className={`rounded px-2 py-0.5 text-xs ${inv.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : inv.status === 'overdue' ? 'bg-red-100 text-red-800' : 'bg-slate-100'}`}>{inv.status}</span>
+                {can('billing.manage') && inv.status !== 'paid' && inv.status !== 'void' && (
+                  <button className="text-xs text-emerald-700 underline" onClick={async () => {
+                    const method = window.prompt('Payment method (bank_transfer, jazzcash, easypaisa, cash, card)', 'bank_transfer') ?? 'bank_transfer';
+                    try { await billingInvoiceUpdate(orgId, inv.id, { status: 'paid', payment_method: method }); load(); } catch (e: any) { setError(e.message); }
+                  }}>Mark paid</button>
+                )}
+              </span>
+            </div>
+          ))}
+          {can('billing.manage') && (
+            <div className="mt-2 flex gap-2">
+              <input className={input} type="number" placeholder="Amount (PKR)" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} />
+              <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" onClick={async () => {
+                if (!invoiceAmount) return;
+                try { await billingInvoiceCreate(orgId, { amount: Number(invoiceAmount) }); setInvoiceAmount(''); load(); } catch (e: any) { setError(e.message); }
+              }}>Issue invoice</button>
+            </div>
+          )}
+          <p className="text-[11px] text-slate-400">Payments are recorded manually (bank / JazzCash / EasyPaisa / cash) — no card gateway is connected.</p>
+        </div>
+      </div>
+
+      {orgType === 'agency' && can('billing.manage') && (
+        <>
+          <div className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+            <h3 className="font-semibold">Service packages</h3>
+            <div className="mt-2 grid gap-2 md:grid-cols-3">
+              {packages.map(p => (
+                <div key={p.id} className="rounded-lg bg-slate-50 p-3 text-sm">
+                  <b>{p.name}</b> — {p.currency} {Number(p.price).toLocaleString('en-PK')}/mo
+                  <div className="text-xs text-slate-500">
+                    {Object.entries(p.limits ?? {}).filter(([, v]) => v !== null && v !== '').map(([k, v]) => <div key={k}>{k.replaceAll('_', ' ')}: {String(v)}</div>)}
+                  </div>
+                  <button className="mt-1 text-xs text-red-600 underline" onClick={async () => { if (window.confirm('Delete this package? Existing subscriptions keep their record.')) { try { await billingPackageDelete(orgId, p.id); load(); } catch (e: any) { setError(e.message); } } }}>Delete</button>
+                </div>
+              ))}
+            </div>
+            <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={async e => {
+              e.preventDefault();
+              const limits: any = {};
+              (['max_leads_per_month', 'max_social_accounts', 'max_posts_per_month', 'max_users'] as const).forEach(k => { if ((pkgForm as any)[k] !== '') limits[k] = Number((pkgForm as any)[k]); });
+              try { await billingPackageCreate(orgId, { name: pkgForm.name, price: pkgForm.price ? Number(pkgForm.price) : 0, limits }); setPkgForm({ name: '', price: '', max_leads_per_month: '', max_social_accounts: '', max_posts_per_month: '', max_users: '' }); load(); }
+              catch (err: any) { setError(err.message); }
+            }}>
+              <label className="text-xs">Package name<input required className={`${input} block`} value={pkgForm.name} onChange={e => setPkgForm({ ...pkgForm, name: e.target.value })} /></label>
+              <label className="text-xs">Monthly price<input className={`${input} block`} type="number" value={pkgForm.price} onChange={e => setPkgForm({ ...pkgForm, price: e.target.value })} /></label>
+              <label className="text-xs">Leads / month<input className={`${input} block`} type="number" value={pkgForm.max_leads_per_month} onChange={e => setPkgForm({ ...pkgForm, max_leads_per_month: e.target.value })} /></label>
+              <label className="text-xs">Social accounts<input className={`${input} block`} type="number" value={pkgForm.max_social_accounts} onChange={e => setPkgForm({ ...pkgForm, max_social_accounts: e.target.value })} /></label>
+              <label className="text-xs">Posts / month<input className={`${input} block`} type="number" value={pkgForm.max_posts_per_month} onChange={e => setPkgForm({ ...pkgForm, max_posts_per_month: e.target.value })} /></label>
+              <label className="text-xs">Users<input className={`${input} block`} type="number" value={pkgForm.max_users} onChange={e => setPkgForm({ ...pkgForm, max_users: e.target.value })} /></label>
+              <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white">Create package</button>
+              <span className="w-full text-[11px] text-slate-400">Leave a limit blank for unlimited.</span>
+            </form>
+          </div>
+
+          <div className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+            <h3 className="font-semibold">Client subscriptions</h3>
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <label className="text-xs">Client<select className={`${input} block`} value={assign.client_organization_id} onChange={e => setAssign({ ...assign, client_organization_id: e.target.value })}>
+                <option value="">Select client…</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.business_name}</option>)}
+              </select></label>
+              <label className="text-xs">Package<select className={`${input} block`} value={assign.service_package_id} onChange={e => setAssign({ ...assign, service_package_id: e.target.value })}>
+                <option value="">Select package…</option>
+                {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select></label>
+              <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" disabled={!assign.client_organization_id || !assign.service_package_id} onClick={async () => {
+                try { await billingSubscribe(orgId, { client_organization_id: Number(assign.client_organization_id), service_package_id: Number(assign.service_package_id), status: 'active' }); load(); }
+                catch (e: any) { setError(e.message); }
+              }}>Assign (1 month)</button>
+            </div>
+            <table className="mt-3 w-full text-left text-sm">
+              <thead><tr className="border-b text-xs text-slate-500"><th className="p-1">Client</th><th className="p-1">Package</th><th className="p-1">Status</th><th className="p-1">Period ends</th><th className="p-1"></th></tr></thead>
+              <tbody>{subscriptions.map(s => (
+                <tr key={s.id} className="border-b last:border-0">
+                  <td className="p-1">{s.organization?.business_name ?? s.organization_id}</td>
+                  <td className="p-1">{s.package?.name}</td>
+                  <td className="p-1">{s.status}</td>
+                  <td className="p-1">{s.ends_at ? String(s.ends_at).slice(0, 10) : '—'}</td>
+                  <td className="p-1">{s.status !== 'cancelled' && <button className="text-xs text-red-600 underline" onClick={async () => { try { await billingSubscriptionStatus(orgId, s.id, 'cancelled'); load(); } catch (e: any) { setError(e.message); } }}>Cancel</button>}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

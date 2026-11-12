@@ -215,7 +215,8 @@ class SocialConnectionTest extends TestCase
         $byKey = collect($res->json('data'))->keyBy('key');
         $this->assertTrue($byKey['facebook']['is_connectable']);
         $this->assertTrue($byKey['instagram']['is_connectable']);
-        $this->assertFalse($byKey['linkedin']['is_connectable']);
+        // Phase 7 shipped LinkedIn; TikTok remains gated (app audit required).
+        $this->assertTrue($byKey['linkedin']['is_connectable']);
         $this->assertFalse($byKey['tiktok']['is_connectable']);
     }
 

@@ -10,6 +10,7 @@ use App\Models\SocialAccount;
 use App\Models\User;
 use App\Services\Publishing\FacebookPublisher;
 use App\Services\Publishing\InstagramPublisher;
+use App\Services\Publishing\LinkedInPublisher;
 use App\Services\Publishing\PublisherInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -28,6 +29,7 @@ class ContentService
         return match ($platform) {
             'facebook' => app(FacebookPublisher::class),
             'instagram' => app(InstagramPublisher::class),
+            'linkedin' => app(LinkedInPublisher::class),
             default => throw ValidationException::withMessages(['platform' => "No publisher shipped for {$platform}."]),
         };
     }
@@ -43,7 +45,11 @@ class ContentService
                 if ($a->status === 'disconnected') $reasons[] = 'disconnected';
                 if (in_array($a->status, ['expired', 'error'], true)) $reasons[] = "connection {$a->status} — test or reconnect";
                 if (!$a->token) $reasons[] = 'no stored token';
-                $scope = $a->platform->key === 'instagram' ? 'instagram_content_publish' : 'pages_manage_posts';
+                $scope = match ($a->platform->key) {
+                    'instagram' => 'instagram_content_publish',
+                    'linkedin' => 'w_organization_social',
+                    default => 'pages_manage_posts',
+                };
                 if ($a->permissions->where('permission', $scope)->where('status', 'declined')->isNotEmpty()) {
                     $reasons[] = "publishing permission {$scope} declined";
                 }
@@ -51,7 +57,7 @@ class ContentService
                     'account' => $a,
                     'eligible' => $reasons === [],
                     'reasons' => $reasons,
-                    'capabilities' => in_array($a->platform->key, ['facebook', 'instagram'], true)
+                    'capabilities' => in_array($a->platform->key, ['facebook', 'instagram', 'linkedin'], true)
                         ? $this->publisherFor($a->platform->key)->getCapabilities() : [],
                 ];
             })->all();

@@ -26,6 +26,7 @@ class ContentPostController extends Controller
     public function store(Request $request, Organization $organization)
     {
         abort_unless($request->user()->can('content.create'), 403);
+        app(\App\Services\Billing\PlanLimitService::class)->assertCan($organization, 'max_posts_per_month');
         $post = $this->content->createPost($organization, $request->user(), $this->validated($request));
         return response()->json(['data' => $this->payload($post)], 201);
     }

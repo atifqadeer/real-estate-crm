@@ -223,6 +223,18 @@ export async function analyticsExportDownload(orgId: number, report: string, for
   URL.revokeObjectURL(url);
 }
 
+// --- Phase 7: billing, packages, AI assistant ---
+export const billingOverview = (orgId: number) => api<any>(`/organizations/${orgId}/billing`, orgId);
+export const billingPackages = (orgId: number) => api<any[]>(`/organizations/${orgId}/billing/packages`, orgId);
+export const billingPackageCreate = (orgId: number, payload: any) => api<any>(`/organizations/${orgId}/billing/packages`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const billingPackageDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/billing/packages/${id}`, orgId, { method: 'DELETE' });
+export const billingSubscriptions = (orgId: number) => api<any[]>(`/organizations/${orgId}/billing/subscriptions`, orgId);
+export const billingSubscribe = (orgId: number, payload: any) => api<any>(`/organizations/${orgId}/billing/subscriptions`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const billingSubscriptionStatus = (orgId: number, id: number, status: string) => api<any>(`/organizations/${orgId}/billing/subscriptions/${id}/status`, orgId, { method: 'PUT', body: JSON.stringify({ status }) });
+export const billingInvoiceCreate = (orgId: number, payload: any) => api<any>(`/organizations/${orgId}/billing/invoices`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const billingInvoiceUpdate = (orgId: number, id: number, payload: any) => api<any>(`/organizations/${orgId}/billing/invoices/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
+export const aiSuggest = (orgId: number, payload: any) => api<{ suggestions: { caption: string; hashtags: string[]; cta: string; ai_generated: boolean }[] }>(`/organizations/${orgId}/ai/caption-suggestions`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+
 // --- Phase 5: pipeline, filters, tasks, notifications, WhatsApp ---
 export interface PipelineColumn { stage: LeadStage; count: number; leads: any[] }
 export const pipelineBoard = (orgId: number, mine = false) => api<PipelineColumn[]>(`/organizations/${orgId}/pipeline${mine ? '?assigned_to=me' : ''}`, orgId);

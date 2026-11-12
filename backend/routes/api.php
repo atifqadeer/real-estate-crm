@@ -23,6 +23,8 @@ use App\Http\Controllers\Api\V1\WhatsAppController;
 use App\Http\Controllers\Api\V1\WhatsAppWebhookController;
 use App\Http\Controllers\Api\V1\CampaignController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\BillingController;
+use App\Http\Controllers\Api\V1\AiContentController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +35,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept'])->middleware('throttle:10,1');
     // Meta returns the browser here after OAuth; identity is proven by the one-time state value.
     Route::get('/social/meta/callback', [SocialAccountController::class, 'callback'])->middleware('throttle:30,1');
+    Route::get('/social/linkedin/callback', [SocialAccountController::class, 'linkedInCallback'])->middleware('throttle:30,1');
     // Meta Webhooks (Phase 4): verification handshake + leadgen events (signature-checked).
     Route::get('/webhooks/meta', [MetaWebhookController::class, 'verify']);
     Route::post('/webhooks/meta', [MetaWebhookController::class, 'receive']);
@@ -161,6 +164,19 @@ Route::prefix('v1')->group(function () {
             Route::post('/organizations/{organization}/campaigns/{campaign}/ads', [CampaignController::class, 'addAd']);
             Route::post('/organizations/{organization}/campaigns/{campaign}/spend', [CampaignController::class, 'addSpend']);
             Route::delete('/organizations/{organization}/campaigns/{campaign}/spend/{record}', [CampaignController::class, 'deleteSpend']);
+            // Phase 7: billing + AI assistant
+            Route::get('/organizations/{organization}/billing', [BillingController::class, 'overview']);
+            Route::get('/organizations/{organization}/billing/packages', [BillingController::class, 'packages']);
+            Route::post('/organizations/{organization}/billing/packages', [BillingController::class, 'packageStore']);
+            Route::put('/organizations/{organization}/billing/packages/{package}', [BillingController::class, 'packageUpdate']);
+            Route::delete('/organizations/{organization}/billing/packages/{package}', [BillingController::class, 'packageDestroy']);
+            Route::get('/organizations/{organization}/billing/subscriptions', [BillingController::class, 'subscriptions']);
+            Route::post('/organizations/{organization}/billing/subscriptions', [BillingController::class, 'subscribe']);
+            Route::put('/organizations/{organization}/billing/subscriptions/{subscription}/status', [BillingController::class, 'subscriptionStatus']);
+            Route::post('/organizations/{organization}/billing/invoices', [BillingController::class, 'invoiceStore']);
+            Route::put('/organizations/{organization}/billing/invoices/{invoice}', [BillingController::class, 'invoiceUpdate']);
+            Route::post('/organizations/{organization}/ai/caption-suggestions', [AiContentController::class, 'suggest']);
+            Route::get('/organizations/{organization}/ai/generations', [AiContentController::class, 'history']);
             Route::get('/organizations/{organization}/analytics/overview', [AnalyticsController::class, 'overview']);
             Route::get('/organizations/{organization}/analytics/agency', [AnalyticsController::class, 'agencyOverview']);
             Route::get('/organizations/{organization}/analytics/export/{report}', [AnalyticsController::class, 'export']);

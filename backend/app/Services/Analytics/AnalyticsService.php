@@ -114,6 +114,31 @@ class AnalyticsService
             // Post engagement metrics require Meta insights access per post;
             // not fetched yet, so reported as not-provided rather than 0.
             'social_engagement' => null,
+            'previous_period' => $this->previousPeriod($org, $from, $to, $totalLeads, $qualified, $won, $spend),
+        ];
+    }
+
+    /** Equal-length previous window totals + % deltas (advanced reporting). */
+    private function previousPeriod(Organization $org, Carbon $from, Carbon $to, int $leads, int $qualified, int $won, float $spend): array
+    {
+        $days = $from->diffInDays($to) + 1;
+        $pTo = $from->copy()->subDay()->endOfDay();
+        $pFrom = $pTo->copy()->subDays($days - 1)->startOfDay();
+        $pLeads = Lead::withoutTenantScope()->where('organization_id', $org->id)->whereBetween('created_at', [$pFrom, $pTo]);
+        $pTotal = (clone $pLeads)->count();
+        $pQualified = (clone $pLeads)->whereIn('lead_pipeline_stage_id', $this->qualifiedStageIds($org) ?: [0])->count();
+        $wonIds = LeadPipelineStage::withoutTenantScope()->where('organization_id', $org->id)->where('is_won', true)->pluck('id')->all();
+        $pWon = (clone $pLeads)->whereIn('lead_pipeline_stage_id', $wonIds ?: [0])->count();
+        $pSpend = (float) CampaignSpendRecord::withoutTenantScope()->where('organization_id', $org->id)
+            ->whereDate('date', '>=', $pFrom->toDateString())->whereDate('date', '<=', $pTo->toDateString())->sum('spend');
+        $delta = fn (float $now, float $prev) => $prev > 0 ? round(($now - $prev) / $prev * 100, 1) : null;
+        return [
+            'range' => ['from' => $pFrom->toDateString(), 'to' => $pTo->toDateString()],
+            'leads_received' => $pTotal, 'qualified_leads' => $pQualified, 'won_leads' => $pWon, 'campaign_spend' => $pSpend,
+            'deltas_percent' => [
+                'leads' => $delta($leads, $pTotal), 'qualified' => $delta($qualified, $pQualified),
+                'won' => $delta($won, $pWon), 'spend' => $delta($spend, $pSpend),
+            ],
         ];
     }
 

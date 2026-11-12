@@ -46,4 +46,22 @@ return [
         'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
     ],
 
+    // LinkedIn (Phase 7) — app must have the Community Management API
+    // product approved for organization posting.
+    'linkedin' => [
+        'client_id' => env('LINKEDIN_CLIENT_ID'),
+        'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
+        'redirect' => env('LINKEDIN_REDIRECT_URI'),
+        'version' => env('LINKEDIN_VERSION', '202605'),
+        'scopes' => env('LINKEDIN_SCOPES', 'openid profile w_member_social r_organization_social w_organization_social'),
+        'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    ],
+
+    // AI content assistant (Phase 7) — any OpenAI-compatible endpoint.
+    'ai' => [
+        'key' => env('AI_API_KEY'),
+        'url' => env('AI_API_URL', 'https://api.openai.com/v1'),
+        'model' => env('AI_MODEL', 'gpt-4o-mini'),
+    ],
+
 ];

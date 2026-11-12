@@ -5,7 +5,20 @@ serving real estate agencies, brokers and developers in Pakistan.
 Built phase by phase from the complete project prompt
 (`Real_Estate_Marketing_Agency_CRM_Complete_Prompt.txt`, 2026-11-12).
 
-**Current status: Phase 6 — Campaigns & Analytics COMPLETE in code (2026-11-12)**
+**Current status: Phase 7 — Advanced Integrations & Commercialization COMPLETE in code (2026-11-12) — all 7 phases delivered**
+LinkedIn Company Page connections and Posts API publishing, an AI
+caption assistant with strict no-invention guardrails (drafts only,
+human approval always), subscription packages with enforced plan
+limits, manual invoicing (bank/JazzCash/EasyPaisa/cash), white-label
+workspace branding, and previous-period analytics comparison.
+TikTok/X/YouTube/Pinterest/Google Ads/property portals were evaluated
+against official docs and deliberately not shipped — the verified
+approval/commercial gates are recorded in
+`docs/12-PHASE7-ADVANCED-INTEGRATIONS.md`. 72 tests green (provider
+APIs faked; live use needs the LinkedIn Community Management API
+approval and an AI provider key).
+
+**Phase 6 — Campaigns & Analytics COMPLETE in code (2026-11-12)**
 Campaign management (ad groups/ads, daily spend by manual entry or
 Meta Ads insights sync), lead attribution by manual link / Meta
 campaign ID / UTM with distinct-lead counting, CPL, cost per qualified

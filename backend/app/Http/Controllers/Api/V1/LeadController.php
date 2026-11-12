@@ -46,6 +46,7 @@ class LeadController extends Controller
     public function store(Request $request, Organization $organization)
     {
         abort_unless($request->user()->can('leads.create'), 403);
+        app(\App\Services\Billing\PlanLimitService::class)->assertCan($organization, 'max_leads_per_month');
         $data = $this->validated($request);
         $sourceKey = $data['source_key'] ?? 'manual';
         unset($data['source_key']);

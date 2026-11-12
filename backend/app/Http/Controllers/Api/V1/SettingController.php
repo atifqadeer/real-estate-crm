@@ -23,8 +23,22 @@ class SettingController extends Controller
             'notification_settings' => ['nullable', 'array'],
             'lead_assignment_mode' => ['sometimes', 'in:manual,round_robin,location,category'],
             'data_retention_days' => ['nullable', 'integer', 'min:1'],
+            // Phase 7: free-form workspace settings JSON — hosts white-label
+            // branding (brand_name, logo_url, primary_color) and feature config.
+            'settings' => ['nullable', 'array'],
+            'settings.branding' => ['nullable', 'array'],
+            'settings.branding.brand_name' => ['nullable', 'string', 'max:80'],
+            'settings.branding.logo_url' => ['nullable', 'url', 'max:255'],
+            'settings.branding.primary_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
         ]);
         $settings = $organization->settings()->firstOrCreate([]);
+        if (isset($data['settings'])) {
+            $merged = array_merge($settings->settings ?? [], $data['settings']);
+            if (isset($data['settings']['branding'])) {
+                $merged['branding'] = array_merge($settings->settings['branding'] ?? [], $data['settings']['branding']);
+            }
+            $data['settings'] = $merged;
+        }
         $settings->update($data);
         $audit->log($organization->id, $request->user()->id, 'settings.updated', ['fields' => array_keys($data)], $request);
         return response()->json(['data' => $settings->fresh()]);
