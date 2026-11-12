@@ -66,14 +66,14 @@ export default function App() {
     if (hasToken()) me().then(u => { setUser(u); setOrgId(u.memberships[0]?.organization_id ?? null); }).catch(() => setToken(null));
   }, []);
 
-  if (!user) return <Login onDone={(u) => { setUser(u); setOrgId(u.memberships[0]?.organization_id ?? null); }} />;
-
-  const membership = user.memberships.find(m => m.organization_id === orgId) ?? user.memberships[0];
+  // White-label branding (Phase 7): workspace brand name / logo / color.
+  // Hooks must run before the early return below (Rules of Hooks) — a
+  // previous version declared these after `if (!user)` and crashed the
+  // app to a blank page on login.
+  const [branding, setBranding] = useState<{ brand_name?: string; logo_url?: string; primary_color?: string }>({});
+  const membership = user ? (user.memberships.find(m => m.organization_id === orgId) ?? user.memberships[0]) : undefined;
   const perms = membership?.permissions ?? [];
   const can = (p: string) => perms.includes(p);
-
-  // White-label branding (Phase 7): workspace brand name / logo / color.
-  const [branding, setBranding] = useState<{ brand_name?: string; logo_url?: string; primary_color?: string }>({});
   useEffect(() => {
     if (!membership) return;
     if (!can('settings.view')) { setBranding({}); return; }
@@ -81,6 +81,8 @@ export default function App() {
       .then((s: any) => setBranding(s?.settings?.branding ?? {}))
       .catch(() => setBranding({}));
   }, [membership?.organization_id]);
+
+  if (!user) return <Login onDone={(u) => { setUser(u); setOrgId(u.memberships[0]?.organization_id ?? null); }} />;
 
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900">
