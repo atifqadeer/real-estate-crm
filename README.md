@@ -5,7 +5,16 @@ serving real estate agencies, brokers and developers in Pakistan.
 Built phase by phase from the complete project prompt
 (`Real_Estate_Marketing_Agency_CRM_Complete_Prompt.txt`, 2026-11-12).
 
-**Current status: Phase 2 — Social Account Connections COMPLETE in code (2026-11-12)**
+**Current status: Phase 3 — Content & Publishing COMPLETE in code (2026-11-12)**
+Post composer with per-destination overrides and previews, media library,
+approval workflow (per-post flag or workspace rule, enforced before any
+publish/schedule), Facebook + Instagram publishing adapters, independent
+per-destination queue jobs with idempotency and bounded retry, UTC
+scheduling with a locked every-minute dispatcher, content calendar, and
+16 starter templates. 30 tests green (Graph API faked in tests; live
+publishing needs the Phase 2 Meta app setup — see `docs/08-PHASE3-PUBLISHING.md`).
+
+**Phase 2 — Social Account Connections COMPLETE in code (2026-11-12)**
 Meta (Facebook + Instagram) connection module: platform registry, OAuth
 connect/callback with Page + linked-Instagram discovery, encrypted token
 storage, per-account permissions, test/reconnect/disconnect, connection

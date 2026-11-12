@@ -79,3 +79,61 @@ export const socialTest = (orgId: number, accountId: number) =>
 export const socialDisconnect = (orgId: number, accountId: number) =>
   api<any>(`/organizations/${orgId}/social/accounts/${accountId}`, orgId, { method: 'DELETE' });
 export const socialLogs = (orgId: number) => api<any>(`/organizations/${orgId}/social/logs`, orgId);
+
+// --- Phase 3: media, content, publishing ---
+export interface MediaAsset {
+  id: number; kind: 'image' | 'video'; public_url: string | null; original_name: string;
+  mime_type: string; size_bytes: number; width: number | null; height: number | null; created_at: string;
+}
+export interface PostTarget {
+  id: number; social_account_id: number; account_name?: string; platform: string; status: string;
+  platform_post_id: string | null; platform_url: string | null; error_message: string | null;
+  caption_override: string | null; hashtags_override: string | null;
+}
+export interface ContentPost {
+  id: number; title: string | null; caption: string | null; hashtags: string | null;
+  link_url: string | null; cta_text: string | null; first_comment: string | null;
+  internal_notes: string | null; status: string; approval_required: boolean;
+  scheduled_at: string | null; published_at: string | null; author?: string | null;
+  targets: PostTarget[]; media: { id: number; kind: string; url: string | null; name: string }[];
+  approvals?: { action: string; comment: string | null; actor: string | null; at: string }[];
+}
+export interface Destination {
+  account: { id: number; platform: string; display_name: string; username: string | null; status: string };
+  eligible: boolean; reasons: string[]; capabilities: Record<string, unknown>;
+}
+export interface ContentTemplate { id: number; name: string; category: string; caption: string | null; hashtags: string | null; is_system: boolean }
+
+export const mediaList = (orgId: number) => api<{ data: MediaAsset[] }>(`/organizations/${orgId}/media?per_page=30`, orgId).then(r => r.data);
+export const mediaDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/media/${id}`, orgId, { method: 'DELETE' });
+export async function mediaUpload(orgId: number, file: File): Promise<MediaAsset> {
+  const t = token();
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API}/organizations/${orgId}/media`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}), 'X-Organization-Id': String(orgId) },
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error?.message ?? body?.message ?? `Upload failed (${res.status})`);
+  return body.data as MediaAsset;
+}
+export const postList = (orgId: number) => api<{ data: ContentPost[] }>(`/organizations/${orgId}/content/posts?per_page=20`, orgId).then(r => r.data);
+export const postGet = (orgId: number, id: number) => api<ContentPost>(`/organizations/${orgId}/content/posts/${id}`, orgId);
+export const postCreate = (orgId: number, payload: any) => api<ContentPost>(`/organizations/${orgId}/content/posts`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const postUpdate = (orgId: number, id: number, payload: any) => api<ContentPost>(`/organizations/${orgId}/content/posts/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
+export const postDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/content/posts/${id}`, orgId, { method: 'DELETE' });
+export const postDuplicate = (orgId: number, id: number) => api<ContentPost>(`/organizations/${orgId}/content/posts/${id}/duplicate`, orgId, { method: 'POST' });
+export const postDestinations = (orgId: number) => api<Destination[]>(`/organizations/${orgId}/content/destinations`, orgId);
+export const postPreviews = (orgId: number, id: number) => api<any[]>(`/organizations/${orgId}/content/posts/${id}/previews`, orgId);
+export const postAction = (orgId: number, id: number, action: string, payload?: any) =>
+  api<ContentPost>(`/organizations/${orgId}/content/posts/${id}/${action}`, orgId, { method: 'POST', body: JSON.stringify(payload ?? {}) });
+export const postRetryTarget = (orgId: number, postId: number, targetId: number) =>
+  api<ContentPost>(`/organizations/${orgId}/content/posts/${postId}/targets/${targetId}/retry`, orgId, { method: 'POST' });
+export const postCalendar = (orgId: number, from: string, to: string) =>
+  api<ContentPost[]>(`/organizations/${orgId}/content/calendar?from=${from}&to=${to}`, orgId);
+export const templateList = (orgId: number) => api<ContentTemplate[]>(`/organizations/${orgId}/templates`, orgId);
+export const templateCreate = (orgId: number, payload: any) => api<ContentTemplate>(`/organizations/${orgId}/templates`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const templateDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/templates/${id}`, orgId, { method: 'DELETE' });
+export const templateSeed = (orgId: number) => api<{ created: number }>(`/organizations/${orgId}/templates/seed-starters`, orgId, { method: 'POST' });

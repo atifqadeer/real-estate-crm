@@ -22,9 +22,12 @@ Delivered: see docs/07. 8 Phase 2 tests green (Graph API faked).
 real client Pages can connect — Standard Access covers only app-role
 users and their own Pages.
 
-## Phase 3 — Social Publishing
+## Phase 3 — Social Publishing — ✅ DONE 2026-11-12 (code + mocked-API tests)
 Composer + media pipeline · per-destination records/jobs · FB/IG
 publishing · scheduling + calendar · approvals · retry/idempotency.
+Delivered: see docs/08. 10 Phase 3 tests green. Live publishing still
+needs the Phase 2 externals (Meta app credentials + Advanced Access)
+and publicly reachable media URLs.
 
 ## Phase 4 — Lead Generation
 Lead model + statuses · manual + CSV/XLSX import · website forms ·

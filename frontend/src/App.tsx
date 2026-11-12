@@ -3,17 +3,22 @@ import {
   login, me, dashboard, members, auditLogs, getSettings, saveSettings,
   inviteMember, createOrganization, setToken, hasToken,
   socialPlatforms, socialAccounts, socialConnect, socialTest, socialDisconnect,
+  mediaList, mediaUpload, mediaDelete, postList, postGet, postCreate, postUpdate, postDelete,
+  postDuplicate, postDestinations, postPreviews, postAction, postRetryTarget, postCalendar,
+  templateList, templateCreate, templateDelete, templateSeed,
   type Me, type Dashboard, type SocialPlatform, type SocialAccount,
+  type MediaAsset, type ContentPost, type Destination, type ContentTemplate,
 } from './api';
 
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
 // Leads / Campaigns nav appears when those phases ship.
-type View = 'dashboard' | 'clients' | 'social' | 'members' | 'settings' | 'audit';
+type View = 'dashboard' | 'clients' | 'social' | 'content' | 'members' | 'settings' | 'audit';
 
 const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
   { id: 'clients', label: 'Clients / Organizations', permission: 'organizations.view' },
   { id: 'social', label: 'Connected Accounts', permission: 'social.view' },
+  { id: 'content', label: 'Content & Publishing', permission: 'content.view' },
   { id: 'members', label: 'Users and Roles', permission: 'members.view' },
   { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
   { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
@@ -79,6 +84,7 @@ export default function App() {
         {membership && view === 'dashboard' && <DashboardView orgId={membership.organization_id} setError={setError} />}
         {membership && view === 'social' && <SocialView orgId={membership.organization_id}
           canConnect={can('social.connect')} canTest={can('social.test')} canDisconnect={can('social.disconnect')} setError={setError} />}
+        {membership && view === 'content' && <ContentView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'clients' && <ClientsView user={user} canCreate={can('organizations.create')} setError={setError}
           onCreated={() => me().then(setUser)} />}
         {membership && view === 'members' && <MembersView orgId={membership.organization_id} canInvite={can('members.invite')} setError={setError} />}
@@ -305,6 +311,356 @@ function SocialView({ orgId, canConnect, canTest, canDisconnect, setError }: {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ---------------- Phase 3: Content & Publishing ----------------
+
+const POST_STATUS_STYLES: Record<string, string> = {
+  draft: 'bg-slate-200 text-slate-700',
+  pending_approval: 'bg-amber-100 text-amber-800',
+  changes_requested: 'bg-orange-100 text-orange-800',
+  approved: 'bg-sky-100 text-sky-800',
+  rejected: 'bg-red-100 text-red-800',
+  scheduled: 'bg-violet-100 text-violet-800',
+  publishing: 'bg-blue-100 text-blue-800',
+  published: 'bg-emerald-100 text-emerald-800',
+  partially_published: 'bg-yellow-100 text-yellow-800',
+  failed: 'bg-red-100 text-red-800',
+  cancelled: 'bg-slate-200 text-slate-500',
+};
+
+function Chip({ status }: { status: string }) {
+  return <span className={`rounded px-2 py-0.5 text-xs ${POST_STATUS_STYLES[status] ?? POST_STATUS_STYLES.draft}`}>{status.replaceAll('_', ' ')}</span>;
+}
+
+function ContentView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [tab, setTab] = useState<'posts' | 'calendar' | 'media' | 'templates'>('posts');
+  const [posts, setPosts] = useState<ContentPost[]>([]);
+  const [editing, setEditing] = useState<ContentPost | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [templateSeed, setTemplateSeed] = useState<{ caption: string; hashtags: string } | null>(null);
+
+  const load = () => postList(orgId).then(setPosts).catch(e => setError(e.message));
+  useEffect(() => { if (tab === 'posts') load(); }, [orgId, tab]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Content &amp; Publishing</h2>
+        {can('content.create') && tab === 'posts' && (
+          <button className="rounded bg-emerald-600 px-4 py-2 text-sm text-white" onClick={() => { setEditing(null); setComposing(true); }}>+ New Post</button>
+        )}
+      </div>
+      <div className="mt-3 flex gap-2 text-sm">
+        {(['posts', 'calendar', 'media', 'templates'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`rounded px-3 py-1.5 capitalize ${tab === t ? 'bg-slate-900 text-white' : 'bg-white shadow-sm'}`}>{t}</button>
+        ))}
+      </div>
+
+      {tab === 'posts' && !composing && !editing && (
+        <div className="mt-4 flex flex-col gap-3">
+          {posts.length === 0 && <p className="rounded bg-white p-4 text-sm text-slate-500">No posts yet in this workspace.</p>}
+          {posts.map(p => (
+            <PostCard key={p.id} post={p} orgId={orgId} can={can} setError={setError} reload={load}
+              onEdit={async () => { try { setEditing(await postGet(orgId, p.id)); } catch (e: any) { setError(e.message); } }} />
+          ))}
+        </div>
+      )}
+      {tab === 'posts' && (composing || editing) && (
+        <Composer orgId={orgId} initial={editing} templateSeed={templateSeed} setError={setError}
+          onDone={() => { setComposing(false); setEditing(null); setTemplateSeed(null); load(); }} />
+      )}
+      {tab === 'calendar' && <CalendarTab orgId={orgId} setError={setError} />}
+      {tab === 'media' && <MediaTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'templates' && <TemplatesTab orgId={orgId} can={can} setError={setError}
+        onApply={t => { setTemplateSeed({ caption: t.caption ?? '', hashtags: t.hashtags ?? '' }); setTab('posts'); setEditing(null); setComposing(true); }} />}
+    </div>
+  );
+}
+
+function PostCard({ post, orgId, can, setError, reload, onEdit }: {
+  post: ContentPost; orgId: number; can: (p: string) => boolean; setError: (s: string) => void; reload: () => void; onEdit: () => void;
+}) {
+  const act = async (fn: () => Promise<unknown>, confirmMsg?: string) => {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    try { await fn(); reload(); } catch (e: any) { setError(e.message); }
+  };
+  const editable = ['draft', 'changes_requested', 'rejected'].includes(post.status);
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <b>{post.title || '(untitled)'}</b>
+        <Chip status={post.status} />
+        {post.scheduled_at && post.status === 'scheduled' && <span className="text-xs text-slate-500">🕒 {new Date(post.scheduled_at).toLocaleString()}</span>}
+        {post.published_at && <span className="text-xs text-slate-500">Published {new Date(post.published_at).toLocaleString()}</span>}
+        <span className="ml-auto flex flex-wrap gap-1.5 text-xs">
+          {editable && can('content.edit') && <button className="rounded border px-2 py-1" onClick={onEdit}>Edit</button>}
+          {editable && can('content.submit') && <button className="rounded border px-2 py-1" onClick={() => act(() => postAction(orgId, post.id, 'submit'))}>Submit for approval</button>}
+          {post.status === 'pending_approval' && can('content.approve') && <>
+            <button className="rounded bg-emerald-600 px-2 py-1 text-white" onClick={() => act(() => postAction(orgId, post.id, 'approve', {}))}>Approve</button>
+            <button className="rounded border border-orange-300 px-2 py-1 text-orange-700" onClick={() => { const c = window.prompt('What needs to change? (required)'); if (c) act(() => postAction(orgId, post.id, 'request-changes', { comment: c })); }}>Request changes</button>
+            <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => { const c = window.prompt('Rejection reason (required)'); if (c) act(() => postAction(orgId, post.id, 'reject', { comment: c })); }}>Reject</button>
+          </>}
+          {['draft', 'approved', 'changes_requested'].includes(post.status) && can('content.publish') &&
+            <button className="rounded bg-blue-600 px-2 py-1 text-white" onClick={() => act(() => postAction(orgId, post.id, 'publish'), 'Publish this post to all selected destinations now?')}>Publish now</button>}
+          {['draft', 'approved'].includes(post.status) && can('content.schedule') &&
+            <button className="rounded border px-2 py-1" onClick={() => { const when = window.prompt('Schedule for (YYYY-MM-DD HH:mm, your local time)'); if (when) act(() => postAction(orgId, post.id, 'schedule', { scheduled_at: new Date(when.replace(' ', 'T')).toISOString() })); }}>Schedule…</button>}
+          {post.status === 'scheduled' && can('content.schedule') &&
+            <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => act(() => postAction(orgId, post.id, 'cancel-schedule'), 'Cancel this scheduled post?')}>Cancel schedule</button>}
+          {can('content.create') && <button className="rounded border px-2 py-1" onClick={() => act(() => postDuplicate(orgId, post.id))}>Duplicate</button>}
+          {editable && can('content.delete') && <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => act(() => postDelete(orgId, post.id), 'Delete this post?')}>Delete</button>}
+        </span>
+      </div>
+      {post.caption && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{post.caption.slice(0, 220)}{post.caption.length > 220 ? '…' : ''}</p>}
+      <div className="mt-2 flex flex-col gap-1">
+        {post.targets.map(t => (
+          <div key={t.id} className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="font-medium">{t.account_name ?? t.platform}</span>
+            <Chip status={t.status} />
+            {t.platform_url && <a className="text-blue-600 underline" href={t.platform_url} target="_blank" rel="noreferrer">View post</a>}
+            {t.error_message && <span className="text-red-600">{t.error_message}</span>}
+            {t.status === 'failed' && can('content.publish') &&
+              <button className="rounded border px-2 py-0.5" onClick={() => act(() => postRetryTarget(orgId, post.id, t.id))}>Retry</button>}
+          </div>
+        ))}
+        {post.targets.length === 0 && <span className="text-xs text-slate-400">No destinations selected</span>}
+      </div>
+    </div>
+  );
+}
+
+function Composer({ orgId, initial, templateSeed, setError, onDone }: {
+  orgId: number; initial: ContentPost | null; templateSeed: { caption: string; hashtags: string } | null;
+  setError: (s: string) => void; onDone: () => void;
+}) {
+  const [form, setForm] = useState({
+    title: initial?.title ?? '', caption: initial?.caption ?? templateSeed?.caption ?? '',
+    hashtags: initial?.hashtags ?? templateSeed?.hashtags ?? '', link_url: initial?.link_url ?? '',
+    cta_text: initial?.cta_text ?? '', first_comment: initial?.first_comment ?? '',
+    internal_notes: initial?.internal_notes ?? '', approval_required: initial?.approval_required ?? false,
+  });
+  const [media, setMedia] = useState<MediaAsset[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<number[]>(initial?.media.map(m => m.id) ?? []);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [selectedTargets, setSelectedTargets] = useState<number[]>(initial?.targets.map(t => t.social_account_id) ?? []);
+  const [overrides, setOverrides] = useState<Record<number, string>>({});
+  const [previews, setPreviews] = useState<any[] | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    mediaList(orgId).then(setMedia).catch(e => setError(e.message));
+    postDestinations(orgId).then(setDestinations).catch(e => setError(e.message));
+    if (initial) {
+      const ov: Record<number, string> = {};
+      initial.targets.forEach(t => { if (t.caption_override) ov[t.social_account_id] = t.caption_override; });
+      setOverrides(ov);
+    }
+  }, [orgId]);
+
+  const payload = () => ({
+    ...form, link_url: form.link_url || null,
+    media_ids: selectedMedia,
+    targets: selectedTargets.map(id => ({ social_account_id: id, caption_override: overrides[id] || null })),
+  });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const saved = initial ? await postUpdate(orgId, initial.id, payload()) : await postCreate(orgId, payload());
+      const pv = await postPreviews(orgId, saved.id);
+      setPreviews(pv);
+      if (!initial) { /* stay open to show previews; user closes manually */ }
+    } catch (e: any) { setError(e.message); }
+    setSaving(false);
+  };
+
+  const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
+  const input = 'w-full rounded border px-2 py-1.5 text-sm';
+
+  return (
+    <div className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+      <h3 className="font-semibold">{initial ? 'Edit post' : 'New post'}</h3>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <label className="text-sm md:col-span-2">Internal title<input className={input} value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. DHA Phase 6 listing — launch" /></label>
+        <label className="text-sm md:col-span-2">Caption<textarea className={input} rows={5} value={form.caption} onChange={e => set('caption', e.target.value)} /></label>
+        <label className="text-sm">Hashtags<input className={input} value={form.hashtags} onChange={e => set('hashtags', e.target.value)} placeholder="#RealEstate #Lahore" /></label>
+        <label className="text-sm">Website / property URL<input className={input} value={form.link_url} onChange={e => set('link_url', e.target.value)} /></label>
+        <label className="text-sm">Call to action<input className={input} value={form.cta_text} onChange={e => set('cta_text', e.target.value)} placeholder="Call now / Book a viewing" /></label>
+        <label className="text-sm">First comment (Facebook)<input className={input} value={form.first_comment} onChange={e => set('first_comment', e.target.value)} /></label>
+        <label className="text-sm md:col-span-2">Internal notes<textarea className={input} rows={2} value={form.internal_notes} onChange={e => set('internal_notes', e.target.value)} /></label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.approval_required} onChange={e => set('approval_required', e.target.checked)} /> Requires client approval before publishing</label>
+      </div>
+
+      <h4 className="mt-4 font-medium">Media</h4>
+      {media.length === 0 && <p className="text-xs text-slate-500">No media in the library yet — upload in the Media tab first.</p>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {media.map(m => (
+          <label key={m.id} className={`cursor-pointer rounded border p-1 ${selectedMedia.includes(m.id) ? 'border-emerald-500 bg-emerald-50' : ''}`}>
+            {m.public_url && m.kind === 'image'
+              ? <img src={m.public_url} alt={m.original_name} className="h-16 w-16 object-cover" />
+              : <div className="flex h-16 w-16 items-center justify-center bg-slate-100 text-xs">🎬 video</div>}
+            <div className="mt-1 flex items-center gap-1 text-[11px]"><input type="checkbox" checked={selectedMedia.includes(m.id)}
+              onChange={e => setSelectedMedia(s => e.target.checked ? [...s, m.id] : s.filter(x => x !== m.id))} />{m.original_name.slice(0, 14)}</div>
+          </label>
+        ))}
+      </div>
+
+      <h4 className="mt-4 font-medium">Destinations</h4>
+      <div className="mt-2 flex flex-col gap-2">
+        {destinations.map(d => (
+          <div key={d.account.id} className="rounded border p-2">
+            <label className={`flex items-center gap-2 text-sm ${!d.eligible ? 'opacity-60' : ''}`}>
+              <input type="checkbox" disabled={!d.eligible} checked={selectedTargets.includes(d.account.id)}
+                onChange={e => setSelectedTargets(s => e.target.checked ? [...s, d.account.id] : s.filter(x => x !== d.account.id))} />
+              <b>{d.account.display_name}</b><span className="text-xs text-slate-500">{d.account.platform}{d.account.username ? ` · @${d.account.username}` : ''}</span>
+              {!d.eligible && <span className="text-xs text-red-600">Not eligible: {d.reasons.join('; ')}</span>}
+            </label>
+            {selectedTargets.includes(d.account.id) && (
+              <input className={`${input} mt-2`} placeholder={`Caption override for this ${d.account.platform} account (optional)`}
+                value={overrides[d.account.id] ?? ''} onChange={e => setOverrides(o => ({ ...o, [d.account.id]: e.target.value }))} />
+            )}
+          </div>
+        ))}
+        {destinations.length === 0 && <p className="text-xs text-slate-500">No connected accounts in this workspace yet.</p>}
+      </div>
+
+      {previews && (
+        <div className="mt-4 rounded bg-slate-50 p-3">
+          <h4 className="font-medium">Destination previews</h4>
+          {previews.map(pv => (
+            <div key={pv.target_id} className="mt-2 rounded bg-white p-3 text-sm shadow-sm">
+              <b>{pv.account_name}</b> <span className="text-xs text-slate-400">({pv.platform})</span>
+              <p className="mt-1 whitespace-pre-wrap">{pv.text || <i className="text-slate-400">(no text)</i>}</p>
+              {pv.link_url && <p className="text-xs text-blue-600">{pv.link_url}</p>}
+              <p className="text-xs text-slate-500">{pv.media.length} media item(s)</p>
+              {pv.errors.map((err: string) => <p key={err} className="text-xs text-red-600">⚠ {err}</p>)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 flex gap-2">
+        <button disabled={saving} className="rounded bg-slate-900 px-4 py-2 text-sm text-white" onClick={save}>{initial ? 'Save changes & preview' : 'Save draft & preview'}</button>
+        <button className="rounded border px-4 py-2 text-sm" onClick={onDone}>Done</button>
+      </div>
+    </div>
+  );
+}
+
+function CalendarTab({ orgId, setError }: { orgId: number; setError: (s: string) => void }) {
+  const [cursor, setCursor] = useState(() => new Date());
+  const [posts, setPosts] = useState<ContentPost[]>([]);
+  const year = cursor.getFullYear(), month = cursor.getMonth();
+  const first = new Date(year, month, 1), last = new Date(year, month + 1, 0);
+  useEffect(() => {
+    postCalendar(orgId, first.toISOString(), last.toISOString()).then(setPosts).catch(e => setError(e.message));
+  }, [orgId, year, month]);
+  const byDay = new Map<number, ContentPost[]>();
+  posts.forEach(p => {
+    const d = new Date((p.status === 'scheduled' ? p.scheduled_at : p.published_at ?? p.scheduled_at) as string);
+    if (d.getMonth() === month) byDay.set(d.getDate(), [...(byDay.get(d.getDate()) ?? []), p]);
+  });
+  const cells: (number | null)[] = [...Array(first.getDay()).fill(null), ...Array.from({ length: last.getDate() }, (_, i) => i + 1)];
+  return (
+    <div className="mt-4">
+      <div className="flex items-center gap-3">
+        <button className="rounded border bg-white px-2 py-1" onClick={() => setCursor(new Date(year, month - 1, 1))}>←</button>
+        <b>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</b>
+        <button className="rounded border bg-white px-2 py-1" onClick={() => setCursor(new Date(year, month + 1, 1))}>→</button>
+        <span className="text-xs text-slate-500">Times shown in your browser timezone; stored in UTC.</span>
+      </div>
+      <div className="mt-3 grid grid-cols-7 gap-1">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className="p-1 text-center text-xs font-semibold text-slate-500">{d}</div>)}
+        {cells.map((day, i) => (
+          <div key={i} className="min-h-20 rounded bg-white p-1 shadow-sm">
+            {day && <><div className="text-xs text-slate-400">{day}</div>
+              {(byDay.get(day) ?? []).map(p => (
+                <div key={p.id} className="mt-1 rounded bg-slate-50 p-1 text-[11px]">
+                  <Chip status={p.status} /> <span>{p.title || p.caption?.slice(0, 24) || 'Post'}</span>
+                  <div className="text-slate-400">{p.targets.map(t => t.platform).join(', ')}</div>
+                </div>
+              ))}</>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MediaTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [busy, setBusy] = useState(false);
+  const load = () => mediaList(orgId).then(setAssets).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId]);
+  return (
+    <div className="mt-4">
+      {can('media.upload') && (
+        <label className="inline-block cursor-pointer rounded bg-emerald-600 px-4 py-2 text-sm text-white">
+          {busy ? 'Uploading…' : 'Upload image or video'}
+          <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" className="hidden"
+            onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setBusy(true); try { await mediaUpload(orgId, f); load(); } catch (err: any) { setError(err.message); } setBusy(false); e.target.value = ''; }} />
+        </label>
+      )}
+      <p className="mt-1 text-xs text-slate-500">JPEG/PNG/WebP up to 10 MB, MP4/MOV up to 100 MB. Publishing requires the file to be reachable at a public URL — on a production domain/S3 this works automatically; a localhost URL cannot be fetched by Meta.</p>
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {assets.map(a => (
+          <div key={a.id} className="rounded-xl bg-white p-2 shadow-sm">
+            {a.kind === 'image' && a.public_url
+              ? <img src={a.public_url} alt={a.original_name} className="h-32 w-full rounded object-cover" />
+              : <div className="flex h-32 w-full items-center justify-center rounded bg-slate-100 text-2xl">🎬</div>}
+            <div className="mt-1 truncate text-xs">{a.original_name}</div>
+            <div className="text-[11px] text-slate-400">{a.kind} · {(a.size_bytes / 1024).toFixed(0)} KB{a.width ? ` · ${a.width}×${a.height}` : ''}</div>
+            {can('media.delete') && <button className="mt-1 text-xs text-red-600" onClick={async () => { if (window.confirm('Delete this media file?')) { try { await mediaDelete(orgId, a.id); load(); } catch (e: any) { setError(e.message); } } }}>Delete</button>}
+          </div>
+        ))}
+        {assets.length === 0 && <p className="text-sm text-slate-500">Library is empty.</p>}
+      </div>
+    </div>
+  );
+}
+
+function TemplatesTab({ orgId, can, setError, onApply }: {
+  orgId: number; can: (p: string) => boolean; setError: (s: string) => void; onApply: (t: ContentTemplate) => void;
+}) {
+  const [templates, setTemplates] = useState<ContentTemplate[]>([]);
+  const [form, setForm] = useState({ name: '', category: '', caption: '', hashtags: '' });
+  const load = () => templateList(orgId).then(setTemplates).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId]);
+  const input = 'w-full rounded border px-2 py-1.5 text-sm';
+  return (
+    <div className="mt-4">
+      {can('content.create') && templates.length === 0 && (
+        <button className="rounded bg-slate-900 px-3 py-2 text-sm text-white" onClick={async () => { try { await templateSeed(orgId); load(); } catch (e: any) { setError(e.message); } }}>
+          Load starter templates (16 real-estate templates)
+        </button>
+      )}
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        {templates.map(t => (
+          <div key={t.id} className="rounded-xl bg-white p-3 shadow-sm">
+            <div className="flex items-center justify-between"><b className="text-sm">{t.name}</b>{t.is_system && <span className="rounded bg-slate-100 px-1.5 text-[10px] text-slate-500">starter</span>}</div>
+            <div className="text-xs text-slate-400">{t.category}</div>
+            <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-slate-600">{t.caption}</p>
+            <div className="mt-2 flex gap-2 text-xs">
+              {can('content.create') && <button className="rounded bg-blue-600 px-2 py-1 text-white" onClick={() => onApply(t)}>Use in new post</button>}
+              {can('content.delete') && <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={async () => { if (window.confirm('Delete template?')) { try { await templateDelete(orgId, t.id); load(); } catch (e: any) { setError(e.message); } } }}>Delete</button>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {can('content.create') && (
+        <div className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+          <h4 className="font-medium">New template</h4>
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
+            <input className={input} placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+            <input className={input} placeholder="Category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
+            <textarea className={`${input} md:col-span-2`} rows={3} placeholder="Caption — use {placeholders} for details you fill per post" value={form.caption} onChange={e => setForm({ ...form, caption: e.target.value })} />
+            <input className={`${input} md:col-span-2`} placeholder="Hashtags" value={form.hashtags} onChange={e => setForm({ ...form, hashtags: e.target.value })} />
+          </div>
+          <button className="mt-2 rounded bg-emerald-600 px-3 py-1.5 text-sm text-white" onClick={async () => { try { await templateCreate(orgId, form); setForm({ name: '', category: '', caption: '', hashtags: '' }); load(); } catch (e: any) { setError(e.message); } }}>Save template</button>
+        </div>
+      )}
     </div>
   );
 }

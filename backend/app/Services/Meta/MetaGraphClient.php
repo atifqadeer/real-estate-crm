@@ -111,4 +111,68 @@ class MetaGraphClient
     {
         return $this->get("/{$externalId}", ['fields' => $fields, 'access_token' => $token]);
     }
+
+    /** POST form data to the Graph API (publishing). Token is passed as a field, never logged by this client. */
+    public function post(string $path, array $params): array
+    {
+        $response = Http::acceptJson()->timeout(60)->asForm()->post($this->base() . $path, $params);
+        $body = $response->json() ?? [];
+        if ($response->failed() || isset($body['error'])) {
+            throw MetaApiException::fromResponse($body, "Meta API POST {$path} failed (HTTP {$response->status()}).");
+        }
+        return $body;
+    }
+
+    /** GET with an explicit access token (container status, permalinks). */
+    public function getWithToken(string $path, array $params, string $token): array
+    {
+        return $this->get($path, array_merge($params, ['access_token' => $token]));
+    }
+
+    /** POST form data to an alternate Graph host (e.g. graph-video.facebook.com). */
+    public function postToHost(string $host, string $path, array $params): array
+    {
+        $version = $this->version();
+        $response = Http::acceptJson()->timeout(120)->asForm()->post("{$host}/{$version}{$path}", $params);
+        $body = $response->json() ?? [];
+        if ($response->failed() || isset($body['error'])) {
+            throw MetaApiException::fromResponse($body, "Meta API POST {$path} failed (HTTP {$response->status()}).");
+        }
+        return $body;
+    }
+
+    /** Resumable Upload API: start a video upload session (official Video API guide). */
+    public function startUploadSession(string $fileName, int $fileLength, string $fileType, string $token): array
+    {
+        return $this->post("/{$this->appId()}/uploads", [
+            'file_name' => $fileName,
+            'file_length' => $fileLength,
+            'file_type' => $fileType,
+            'access_token' => $token,
+        ]);
+    }
+
+    /** Resumable Upload API: send the file bytes for a session; returns the file handle. */
+    public function uploadVideoChunk(string $sessionId, string $binary, string $token): string
+    {
+        $version = $this->version();
+        $response = Http::timeout(300)
+            ->withHeaders(['file_offset' => '0', 'Authorization' => 'OAuth ' . $token])
+            ->withBody($binary, 'application/octet-stream')
+            ->post("https://graph-video.facebook.com/{$version}/upload:{$sessionId}");
+        $body = $response->json() ?? [];
+        if ($response->failed() || !isset($body['h'])) {
+            throw MetaApiException::fromResponse($body, 'Video upload chunk failed.');
+        }
+        return (string) $body['h'];
+    }
+
+    /**
+     * Permanent errors must not be retried (auth, permission, validation,
+     * policy). Rate limits and server faults are transient.
+     */
+    public static function isPermanent(MetaApiException $e): bool
+    {
+        return in_array($e->graphCode, [100, 190, 200, 294, 10, 2200, 803], true);
+    }
 }
