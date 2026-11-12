@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react';
 import {
   login, me, dashboard, members, auditLogs, getSettings, saveSettings,
   inviteMember, createOrganization, setToken, hasToken,
-  type Me, type Dashboard,
+  socialPlatforms, socialAccounts, socialConnect, socialTest, socialDisconnect,
+  type Me, type Dashboard, type SocialPlatform, type SocialAccount,
 } from './api';
 
-// Phase 1 shell: only modules that exist are shown (prompt: no fake buttons).
-// Social / Leads / Campaigns nav appears when those phases ship.
-type View = 'dashboard' | 'clients' | 'members' | 'settings' | 'audit';
+// Shell rule (prompt): only modules that exist are shown — no fake buttons.
+// Leads / Campaigns nav appears when those phases ship.
+type View = 'dashboard' | 'clients' | 'social' | 'members' | 'settings' | 'audit';
 
 const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
   { id: 'clients', label: 'Clients / Organizations', permission: 'organizations.view' },
+  { id: 'social', label: 'Connected Accounts', permission: 'social.view' },
   { id: 'members', label: 'Users and Roles', permission: 'members.view' },
   { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
   { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
@@ -22,8 +24,18 @@ export default function App() {
   const [orgId, setOrgId] = useState<number | null>(null);
   const [view, setView] = useState<View>('dashboard');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
+    // Meta OAuth returns to the SPA root with ?meta=connected|denied|error
+    const params = new URLSearchParams(window.location.search);
+    const meta = params.get('meta');
+    if (meta) {
+      setView('social');
+      if (meta === 'connected') setNotice(`Meta connected — ${params.get('accounts') ?? ''} Facebook Page(s) discovered, with any linked Instagram accounts.`);
+      else setError(`Meta connection ${meta}: ${params.get('message') ?? 'please try again.'}`);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
     if (hasToken()) me().then(u => { setUser(u); setOrgId(u.memberships[0]?.organization_id ?? null); }).catch(() => setToken(null));
   }, []);
 
@@ -63,7 +75,10 @@ export default function App() {
       </aside>
       <main className="flex-1 p-6">
         {error && <div className="mb-4 rounded bg-red-100 p-3 text-sm text-red-800">{error}</div>}
+        {notice && <div className="mb-4 rounded bg-emerald-100 p-3 text-sm text-emerald-900">{notice}</div>}
         {membership && view === 'dashboard' && <DashboardView orgId={membership.organization_id} setError={setError} />}
+        {membership && view === 'social' && <SocialView orgId={membership.organization_id}
+          canConnect={can('social.connect')} canTest={can('social.test')} canDisconnect={can('social.disconnect')} setError={setError} />}
         {membership && view === 'clients' && <ClientsView user={user} canCreate={can('organizations.create')} setError={setError}
           onCreated={() => me().then(setUser)} />}
         {membership && view === 'members' && <MembersView orgId={membership.organization_id} canInvite={can('members.invite')} setError={setError} />}
@@ -188,5 +203,108 @@ function AuditView({ orgId, setError }: { orgId: number; setError: (s: string) =
   return (
     <div><h2 className="text-2xl font-bold">Audit Logs</h2>
       <ul className="mt-4 divide-y rounded bg-white">{rows.map(r => <li key={r.id} className="p-3 text-sm">{r.action} — {r.user?.name ?? 'system'} · {new Date(r.created_at).toLocaleString()}</li>)}</ul></div>
+  );
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  connected: 'bg-emerald-100 text-emerald-800',
+  disconnected: 'bg-slate-200 text-slate-700',
+  expired: 'bg-red-100 text-red-800',
+  permission_required: 'bg-amber-100 text-amber-800',
+  error: 'bg-red-100 text-red-800',
+  pending: 'bg-slate-200 text-slate-700',
+};
+
+function SocialView({ orgId, canConnect, canTest, canDisconnect, setError }: {
+  orgId: number; canConnect: boolean; canTest: boolean; canDisconnect: boolean; setError: (s: string) => void;
+}) {
+  const [platforms, setPlatforms] = useState<SocialPlatform[]>([]);
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [busy, setBusy] = useState('');
+
+  const load = () => {
+    socialPlatforms(orgId).then(setPlatforms).catch(e => setError(e.message));
+    socialAccounts(orgId).then(setAccounts).catch(e => setError(e.message));
+  };
+  useEffect(load, [orgId]);
+
+  const connect = async (platformKey: string, rerequest = false) => {
+    try {
+      const r = await socialConnect(orgId, platformKey, rerequest);
+      window.location.href = r.url; // off to Meta's official OAuth dialog
+    } catch (e: any) { setError(e.message); }
+  };
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold">Connected Accounts</h2>
+      <p className="text-sm text-slate-500">Social accounts belong to this workspace only. Tokens are stored encrypted on the server and never shown here.</p>
+
+      <h3 className="mt-6 font-semibold">Platforms</h3>
+      <div className="mt-2 grid gap-3 md:grid-cols-2">
+        {platforms.map(p => (
+          <div key={p.key} className="rounded-xl bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <b>{p.name}</b>
+              {p.is_connectable
+                ? <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">Available</span>
+                : <span className="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-600">Not yet available</span>}
+            </div>
+            {p.notes && <p className="mt-1 text-xs text-slate-500">{p.notes}</p>}
+            {p.is_connectable && canConnect && (p.key === 'facebook' || p.key === 'instagram') && (
+              <button className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-sm text-white" onClick={() => connect('facebook')}>
+                Connect with Facebook
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <h3 className="mt-6 font-semibold">Accounts in this workspace</h3>
+      {accounts.length === 0 && <p className="mt-2 rounded bg-white p-4 text-sm text-slate-500">No accounts connected yet. Use “Connect with Facebook” above — Pages the person manages are discovered automatically, along with any linked Instagram professional accounts.</p>}
+      <div className="mt-2 flex flex-col gap-3">
+        {accounts.map(a => (
+          <div key={a.id} className="rounded-xl bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              {a.profile_picture_url && <img src={a.profile_picture_url} alt="" className="h-10 w-10 rounded-full" />}
+              <div className="min-w-48">
+                <div className="font-semibold">{a.display_name} <span className="text-xs font-normal text-slate-400">({a.platform})</span></div>
+                <div className="text-xs text-slate-500">{a.username ? `@${a.username} · ` : ''}ID {a.external_id}{a.connected_by ? ` · connected by ${a.connected_by}` : ''}</div>
+              </div>
+              <span className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[a.status] ?? STATUS_STYLES.pending}`}>{a.status.replace('_', ' ')}</span>
+              <div className="ml-auto flex gap-2">
+                {canTest && a.status !== 'disconnected' && (
+                  <button disabled={busy === `test-${a.id}`} className="rounded border px-3 py-1.5 text-sm"
+                    onClick={async () => { setBusy(`test-${a.id}`); try { const r = await socialTest(orgId, a.id); setAccounts(prev => prev.map(x => x.id === r.id ? r : x)); } catch (e: any) { setError(e.message); } setBusy(''); }}>
+                    Test connection
+                  </button>
+                )}
+                {canConnect && (a.status === 'expired' || a.status === 'permission_required' || a.status === 'error' || a.status === 'disconnected') && (
+                  <button className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white" onClick={() => connect('facebook', a.status === 'permission_required')}>Reconnect</button>
+                )}
+                {canDisconnect && a.status !== 'disconnected' && (
+                  <button className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700"
+                    onClick={async () => { if (!window.confirm(`Disconnect ${a.display_name}? Its stored token will be deleted. Scheduled/published history is kept.`)) return; try { await socialDisconnect(orgId, a.id); load(); } catch (e: any) { setError(e.message); } }}>
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            </div>
+            {a.last_error && <p className="mt-2 text-xs text-red-700">{a.last_error}</p>}
+            <div className="mt-2 text-xs text-slate-500">
+              Last synced: {a.last_synced_at ? new Date(a.last_synced_at).toLocaleString() : '—'}
+              {a.token && <> · Token: {a.token.type}, {a.token.expires_at ? `expires ${new Date(a.token.expires_at).toLocaleDateString()}` : 'no provider expiry'}</>}
+            </div>
+            {a.permissions.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {a.permissions.map(p => (
+                  <span key={p.permission} className={`rounded px-1.5 py-0.5 text-[11px] ${p.status === 'granted' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700 line-through'}`}>{p.permission}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

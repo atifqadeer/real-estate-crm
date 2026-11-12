@@ -11,11 +11,16 @@ audit logs · tenant-scoped dashboard · React app shell with
 permission-aware sidebar · tenant-isolation test suite.
 **Acceptance:** docs/03 test list green; Client A cannot see Client B.
 
-## Phase 2 — Social Account Connections
+## Phase 2 — Social Account Connections — ✅ DONE 2026-11-12 (code + mocked-API tests)
 Platform registry · Meta OAuth (Facebook Pages, Instagram discovery) ·
 encrypted token storage · status/refresh/reauthorize · connection logs.
 **Gate:** Meta app review + business verification requirements verified
 against current official docs before coding each flow.
+Delivered: see docs/07. 8 Phase 2 tests green (Graph API faked).
+**Still external:** live connection needs Atif's Meta app credentials in
+`.env`, and Advanced Access (App Review + Business Verification) before
+real client Pages can connect — Standard Access covers only app-role
+users and their own Pages.
 
 ## Phase 3 — Social Publishing
 Composer + media pipeline · per-destination records/jobs · FB/IG

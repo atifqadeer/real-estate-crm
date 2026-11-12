@@ -5,7 +5,16 @@ serving real estate agencies, brokers and developers in Pakistan.
 Built phase by phase from the complete project prompt
 (`Real_Estate_Marketing_Agency_CRM_Complete_Prompt.txt`, 2026-11-12).
 
-**Current status: Phase 1 — Foundation & Tenancy COMPLETE (2026-11-12)**
+**Current status: Phase 2 — Social Account Connections COMPLETE in code (2026-11-12)**
+Meta (Facebook + Instagram) connection module: platform registry, OAuth
+connect/callback with Page + linked-Instagram discovery, encrypted token
+storage, per-account permissions, test/reconnect/disconnect, connection
+logs, daily token-refresh job. 20 tests green (Graph API is faked in
+tests — a live connection still needs the agency's own Meta app
+credentials in `.env` and, for client Pages, Advanced Access via App
+Review + Business Verification; see `docs/07-PHASE2-META-INTEGRATION.md`).
+
+**Phase 1 — Foundation & Tenancy COMPLETE (2026-11-12)**
 Laravel 13 API + React/TS frontend implemented; full test suite green:
 12 passed, including 10 tenant-isolation acceptance tests (Client A gets
 403 on every Client B resource; per-organization roles proven; invitation

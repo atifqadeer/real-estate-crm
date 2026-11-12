@@ -56,3 +56,26 @@ export const inviteMember = (orgId: number, email: string, role: string) =>
   api<any>(`/organizations/${orgId}/invitations`, orgId, { method: 'POST', body: JSON.stringify({ email, role }) });
 export const createOrganization = (payload: any) =>
   api<any>('/organizations', undefined, { method: 'POST', body: JSON.stringify(payload) });
+
+// --- Phase 2: social account connections ---
+export interface SocialPlatform {
+  id: number; key: string; name: string; is_connectable: boolean;
+  capabilities: Record<string, unknown> | null; notes: string | null;
+}
+export interface SocialAccount {
+  id: number; platform: string; external_id: string; username: string | null;
+  display_name: string; profile_picture_url: string | null; status: string;
+  connected_by: string | null; last_synced_at: string | null; last_error: string | null;
+  metadata: Record<string, unknown> | null;
+  permissions: { permission: string; status: string }[];
+  token: { type: string; expires_at: string | null; scopes: string[] | null } | null;
+}
+export const socialPlatforms = (orgId: number) => api<SocialPlatform[]>(`/organizations/${orgId}/social/platforms`, orgId);
+export const socialAccounts = (orgId: number) => api<SocialAccount[]>(`/organizations/${orgId}/social/accounts`, orgId);
+export const socialConnect = (orgId: number, platform: string, rerequest = false) =>
+  api<{ url: string }>(`/organizations/${orgId}/social/connect/${platform}${rerequest ? '?rerequest=1' : ''}`, orgId);
+export const socialTest = (orgId: number, accountId: number) =>
+  api<SocialAccount>(`/organizations/${orgId}/social/accounts/${accountId}/test`, orgId, { method: 'POST' });
+export const socialDisconnect = (orgId: number, accountId: number) =>
+  api<any>(`/organizations/${orgId}/social/accounts/${accountId}`, orgId, { method: 'DELETE' });
+export const socialLogs = (orgId: number) => api<any>(`/organizations/${orgId}/social/logs`, orgId);

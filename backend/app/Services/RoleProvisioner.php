@@ -21,21 +21,22 @@ class RoleProvisioner
         'settings.view', 'settings.update',
         'audit.view',
         'dashboard.view',
+        'social.view', 'social.connect', 'social.test', 'social.disconnect',
     ];
 
     public const ROLE_PERMISSIONS = [
         'super_admin' => '*',
         'agency_admin' => ['organizations.view', 'organizations.create', 'organizations.update', 'members.view', 'members.invite', 'members.update', 'members.remove', 'settings.view', 'settings.update', 'audit.view', 'dashboard.view'],
-        'agency_marketing_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view'],
-        'agency_marketing_executive' => ['organizations.view', 'dashboard.view'],
-        'agency_account_manager' => ['organizations.view', 'members.view', 'members.invite', 'settings.view', 'settings.update', 'dashboard.view'],
-        'agency_analyst' => ['organizations.view', 'audit.view', 'dashboard.view'],
+        'agency_marketing_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'social.disconnect'],
+        'agency_marketing_executive' => ['organizations.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test'],
+        'agency_account_manager' => ['organizations.view', 'members.view', 'members.invite', 'settings.view', 'settings.update', 'dashboard.view', 'social.view', 'social.connect', 'social.test'],
+        'agency_analyst' => ['organizations.view', 'audit.view', 'dashboard.view', 'social.view'],
         'client_owner' => '*',
-        'client_admin' => ['organizations.view', 'organizations.update', 'members.view', 'members.invite', 'members.update', 'members.remove', 'settings.view', 'settings.update', 'audit.view', 'dashboard.view'],
-        'client_marketing_approver' => ['organizations.view', 'members.view', 'dashboard.view'],
-        'client_sales_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view'],
+        'client_admin' => ['organizations.view', 'organizations.update', 'members.view', 'members.invite', 'members.update', 'members.remove', 'settings.view', 'settings.update', 'audit.view', 'dashboard.view', 'social.view', 'social.connect', 'social.test', 'social.disconnect'],
+        'client_marketing_approver' => ['organizations.view', 'members.view', 'dashboard.view', 'social.view'],
+        'client_sales_manager' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view'],
         'client_sales_agent' => ['organizations.view', 'dashboard.view'],
-        'client_readonly' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view'],
+        'client_readonly' => ['organizations.view', 'members.view', 'settings.view', 'dashboard.view', 'social.view'],
     ];
 
     public function ensurePermissions(): void

@@ -18,6 +18,7 @@ class ResolveTenant
     {
         $user = $request->user();
         abort_unless($user, 401);
+        TenantContext::clear();
 
         $routeOrg = $request->route('organization');
         $organizationId = $routeOrg instanceof Organization ? $routeOrg->id : ($routeOrg ?? $request->header('X-Organization-Id'));

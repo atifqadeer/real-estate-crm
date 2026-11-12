@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    // Meta (Facebook Login) — Phase 2. Secrets live ONLY in .env / secret manager.
+    'meta' => [
+        'app_id' => env('META_APP_ID'),
+        'app_secret' => env('META_APP_SECRET'),
+        'redirect' => env('META_REDIRECT_URI'),
+        'graph_version' => env('META_GRAPH_VERSION', 'v27.0'),
+        'scopes' => env('META_SCOPES', 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish'),
+        'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    ],
+
 ];
