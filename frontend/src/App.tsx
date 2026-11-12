@@ -15,15 +15,19 @@ import {
   notificationList, notificationReadAll, notificationRead, notificationPreferences, notificationPreferencesUpdate,
   waAccounts, waConnect, waDisconnect, waTemplates, waSyncTemplates, waConversations, waConversation,
   waStartForLead, waSendText, waSendTemplate,
+  campaignList, campaignGet, campaignCreate, campaignUpdate, campaignDelete, campaignAddSpend,
+  campaignDeleteSpend, campaignAddGroup, campaignAddAd, campaignCompare, campaignSyncMeta,
+  analyticsOverview, analyticsAgency, analyticsExportDownload,
   type Me, type Dashboard, type SocialPlatform, type SocialAccount,
   type MediaAsset, type ContentPost, type Destination, type ContentTemplate,
   type Lead, type LeadStage, type LeadSourceT, type LeadFormT, type FollowUp,
   type PipelineColumn, type SavedFilter, type LeadTaskT, type AppNotification,
   type WhatsAppAccountT, type WhatsAppTemplateT, type WhatsAppConversationT,
+  type CampaignT, type CampaignMetrics,
 } from './api';
 
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
-type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'whatsapp' | 'members' | 'settings' | 'audit';
+type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'whatsapp' | 'campaigns' | 'analytics' | 'members' | 'settings' | 'audit';
 
 const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
@@ -32,6 +36,8 @@ const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'content', label: 'Content & Publishing', permission: 'content.view' },
   { id: 'leads', label: 'Leads', permission: 'leads.view' },
   { id: 'whatsapp', label: 'WhatsApp Inbox', permission: 'whatsapp.view' },
+  { id: 'campaigns', label: 'Campaigns', permission: 'campaigns.view' },
+  { id: 'analytics', label: 'Analytics', permission: 'analytics.view' },
   { id: 'members', label: 'Users and Roles', permission: 'members.view' },
   { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
   { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
@@ -101,6 +107,8 @@ export default function App() {
         {membership && view === 'content' && <ContentView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'leads' && <LeadsView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'whatsapp' && <WhatsAppView orgId={membership.organization_id} can={can} setError={setError} />}
+        {membership && view === 'campaigns' && <CampaignsView orgId={membership.organization_id} can={can} setError={setError} />}
+        {membership && view === 'analytics' && <AnalyticsView orgId={membership.organization_id} orgType={membership.type} can={can} setError={setError} />}
         {membership && view === 'clients' && <ClientsView user={user} canCreate={can('organizations.create')} setError={setError}
           onCreated={() => me().then(setUser)} />}
         {membership && view === 'members' && <MembersView orgId={membership.organization_id} canInvite={can('members.invite')} setError={setError} />}
@@ -1439,6 +1447,331 @@ function WhatsAppView({ orgId, can, setError }: { orgId: number; can: (p: string
             : <div className="flex h-full items-center justify-center p-8 text-center text-sm text-slate-400">Select a conversation, or open one from a lead's detail page.</div>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------- Phase 6: Campaigns & Analytics ----------------
+
+const fmtMoney = (v: number | null | undefined, currency = 'PKR') =>
+  v === null || v === undefined ? '—' : `${currency} ${Number(v).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`;
+const fmtNum = (v: number | null | undefined) => (v === null || v === undefined ? 'n/a' : v.toLocaleString('en-PK'));
+
+function CampaignsView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [campaigns, setCampaigns] = useState<CampaignT[]>([]);
+  const [detail, setDetail] = useState<(CampaignT & { metrics: CampaignMetrics }) | null>(null);
+  const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [comparison, setComparison] = useState<{ campaign: any; metrics: CampaignMetrics }[] | null>(null);
+  const [form, setForm] = useState({ name: '', platform: 'meta', objective: 'leads', budget: '', status: 'active', external_campaign_id: '', utm_campaign: '' });
+  const [sync, setSync] = useState({ ad_account_id: '', since: '', until: '' });
+  const [syncMsg, setSyncMsg] = useState('');
+
+  const load = () => campaignList(orgId).then(setCampaigns).catch(e => setError(e.message));
+  useEffect(() => { load(); }, [orgId]);
+  const openDetail = async (id: number) => { try { setDetail(await campaignGet(orgId, id)); } catch (e: any) { setError(e.message); } };
+  const input = 'rounded border px-2 py-1.5 text-sm';
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold">Campaigns</h2>
+
+      {can('campaigns.create') && (
+        <form className="mt-3 flex flex-wrap items-end gap-2 rounded-xl bg-white p-3 shadow-sm" onSubmit={async e => {
+          e.preventDefault();
+          try {
+            await campaignCreate(orgId, {
+              name: form.name, platform: form.platform, objective: form.objective, status: form.status,
+              budget: form.budget ? Number(form.budget) : null,
+              external_campaign_id: form.external_campaign_id || null,
+              tracking_params: form.utm_campaign ? { utm_source: form.platform, utm_medium: 'cpc', utm_campaign: form.utm_campaign } : null,
+            });
+            setForm({ name: '', platform: 'meta', objective: 'leads', budget: '', status: 'active', external_campaign_id: '', utm_campaign: '' });
+            load();
+          } catch (err: any) { setError(err.message); }
+        }}>
+          <label className="text-xs">Campaign name<input required className={`${input} block`} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>
+          <label className="text-xs">Platform<select className={`${input} block`} value={form.platform} onChange={e => setForm({ ...form, platform: e.target.value })}><option value="meta">Meta</option><option value="google">Google</option><option value="tiktok">TikTok</option><option value="offline">Offline</option><option value="other">Other</option></select></label>
+          <label className="text-xs">Budget (PKR)<input className={`${input} block`} type="number" value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} /></label>
+          <label className="text-xs">Meta campaign ID (optional)<input className={`${input} block`} value={form.external_campaign_id} onChange={e => setForm({ ...form, external_campaign_id: e.target.value })} /></label>
+          <label className="text-xs">UTM campaign (optional)<input className={`${input} block`} placeholder="dha_launch" value={form.utm_campaign} onChange={e => setForm({ ...form, utm_campaign: e.target.value })} /></label>
+          <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white">Create campaign</button>
+        </form>
+      )}
+
+      {can('campaigns.spend') && (
+        <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl bg-white p-3 shadow-sm">
+          <b className="w-full text-sm">Sync from Meta Ads</b>
+          <label className="text-xs">Ad account ID<input className={`${input} block`} placeholder="1234567890 or act_1234567890" value={sync.ad_account_id} onChange={e => setSync({ ...sync, ad_account_id: e.target.value })} /></label>
+          <label className="text-xs">Since<input className={`${input} block`} type="date" value={sync.since} onChange={e => setSync({ ...sync, since: e.target.value })} /></label>
+          <label className="text-xs">Until<input className={`${input} block`} type="date" value={sync.until} onChange={e => setSync({ ...sync, until: e.target.value })} /></label>
+          <button className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white" onClick={async () => {
+            try { const r = await campaignSyncMeta(orgId, { ad_account_id: sync.ad_account_id, since: sync.since || undefined, until: sync.until || undefined }); setSyncMsg(`Synced ${r.campaigns} campaigns, ${r.spend_rows} daily spend rows.`); load(); }
+            catch (e: any) { setError(e.message); }
+          }}>Sync now</button>
+          {syncMsg && <span className="text-xs text-emerald-700">{syncMsg}</span>}
+          <span className="w-full text-[11px] text-slate-400">Uses the connected Meta token; the ad account must grant it the ads_read permission. Spend is stored in the ad account's currency — set each campaign's currency accordingly.</span>
+        </div>
+      )}
+
+      <div className="mt-3 overflow-x-auto rounded-xl bg-white shadow-sm">
+        <table className="w-full text-left text-sm">
+          <thead><tr className="border-b text-xs text-slate-500">
+            <th className="p-2"></th><th className="p-2">Campaign</th><th className="p-2">Status</th><th className="p-2">Spend</th>
+            <th className="p-2">Leads</th><th className="p-2">Qualified</th><th className="p-2">CPL</th><th className="p-2">CPQL</th><th className="p-2">Conv. %</th><th className="p-2">Budget used</th><th className="p-2"></th>
+          </tr></thead>
+          <tbody>
+            {campaigns.map(c => {
+              const m = c.metrics;
+              return (
+                <tr key={c.id} className="border-b last:border-0 hover:bg-slate-50">
+                  <td className="p-2"><input type="checkbox" checked={compareIds.includes(c.id)} onChange={e => setCompareIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(x => x !== c.id))} /></td>
+                  <td className="p-2 font-medium">{c.name}<div className="text-[11px] font-normal text-slate-400">{c.platform}{c.external_campaign_id ? ` · ${c.external_campaign_id}` : ''}</div></td>
+                  <td className="p-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{c.status}</span></td>
+                  <td className="p-2">{fmtMoney(m?.spend, c.currency)}</td>
+                  <td className="p-2">{m?.leads ?? 0}</td>
+                  <td className="p-2">{m?.qualified_leads ?? 0}</td>
+                  <td className="p-2">{fmtMoney(m?.cost_per_lead, c.currency)}</td>
+                  <td className="p-2">{fmtMoney(m?.cost_per_qualified_lead, c.currency)}</td>
+                  <td className="p-2">{m?.conversion_rate_percent ?? '—'}</td>
+                  <td className="p-2">{m?.budget_used_percent != null ? `${m.budget_used_percent}%` : '—'}</td>
+                  <td className="p-2"><button className="text-xs text-blue-600 underline" onClick={() => openDetail(c.id)}>Manage</button></td>
+                </tr>
+              );
+            })}
+            {campaigns.length === 0 && <tr><td colSpan={11} className="p-4 text-center text-slate-400">No campaigns yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {compareIds.length >= 2 && (
+        <button className="mt-2 rounded bg-slate-900 px-3 py-1.5 text-sm text-white" onClick={async () => { try { setComparison(await campaignCompare(orgId, compareIds)); } catch (e: any) { setError(e.message); } }}>
+          Compare {compareIds.length} campaigns
+        </button>
+      )}
+      {comparison && (
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {comparison.map(row => (
+            <div key={row.campaign.id} className="rounded-xl bg-white p-4 shadow-sm">
+              <b>{row.campaign.name}</b>
+              <div className="mt-1 grid grid-cols-2 gap-1 text-sm">
+                <span>Spend: {fmtMoney(row.metrics.spend)}</span><span>Leads: {row.metrics.leads}</span>
+                <span>CPL: {fmtMoney(row.metrics.cost_per_lead)}</span><span>CPQL: {fmtMoney(row.metrics.cost_per_qualified_lead)}</span>
+                <span>Qualified: {row.metrics.qualified_leads}</span><span>Won: {row.metrics.won_leads} ({row.metrics.conversion_rate_percent ?? '—'}%)</span>
+                <span>Impressions: {fmtNum(row.metrics.impressions)}</span><span>Clicks: {fmtNum(row.metrics.clicks)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {detail && <CampaignDetail orgId={orgId} campaign={detail} can={can} setError={setError} onClose={() => { setDetail(null); load(); }} onChange={setDetail} />}
+    </div>
+  );
+}
+
+function CampaignDetail({ orgId, campaign, can, setError, onClose, onChange }: {
+  orgId: number; campaign: CampaignT & { metrics: CampaignMetrics }; can: (p: string) => boolean;
+  setError: (s: string) => void; onClose: () => void; onChange: (c: any) => void;
+}) {
+  const [spend, setSpend] = useState({ date: new Date().toISOString().slice(0, 10), spend: '', impressions: '', clicks: '' });
+  const [groupName, setGroupName] = useState('');
+  const [adName, setAdName] = useState('');
+  const m = campaign.metrics;
+  const input = 'rounded border px-2 py-1.5 text-sm';
+  const refresh = async () => { try { onChange(await campaignGet(orgId, campaign.id)); } catch (e: any) { setError(e.message); } };
+  return (
+    <div className="fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-3xl rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-lg font-bold">{campaign.name}</h3>
+            <div className="text-xs text-slate-500">{campaign.platform} · {campaign.status} · {campaign.objective ?? ''} {campaign.target_location ? `· ${campaign.target_location}` : ''}</div>
+            <div className="text-xs text-slate-400">Attribution: {Object.entries(m.attribution_methods).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'no attributed leads yet'} — leads are counted once, matched by manual link, Meta campaign ID, or UTM campaign.</div>
+          </div>
+          <button className="rounded border px-2 py-1 text-sm" onClick={onClose}>Close</button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+          {[['Spend', fmtMoney(m.spend, campaign.currency)], ['Impressions', fmtNum(m.impressions)], ['Reach', fmtNum(m.reach)], ['Clicks', fmtNum(m.clicks)],
+            ['Leads', String(m.leads)], ['Qualified', String(m.qualified_leads)], ['Won', String(m.won_leads)], ['Meta-reported conversions', fmtNum(m.conversions_reported)],
+            ['Cost / lead', fmtMoney(m.cost_per_lead, campaign.currency)], ['Cost / qualified', fmtMoney(m.cost_per_qualified_lead, campaign.currency)],
+            ['Conversion', m.conversion_rate_percent != null ? `${m.conversion_rate_percent}%` : '—'], ['Budget used', m.budget_used_percent != null ? `${m.budget_used_percent}% of ${fmtMoney(m.budget, campaign.currency)}` : '—'],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded bg-slate-50 p-2"><div className="text-base font-semibold">{v}</div><div className="text-[11px] text-slate-500">{k}</div></div>
+          ))}
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">"n/a" means the provider/manual entry did not supply that metric — it is not zero.</p>
+
+        {can('campaigns.spend') && (
+          <form className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3" onSubmit={async e => {
+            e.preventDefault();
+            try {
+              await campaignAddSpend(orgId, campaign.id, { date: spend.date, spend: Number(spend.spend), impressions: spend.impressions ? Number(spend.impressions) : null, clicks: spend.clicks ? Number(spend.clicks) : null });
+              setSpend({ ...spend, spend: '', impressions: '', clicks: '' }); refresh();
+            } catch (err: any) { setError(err.message); }
+          }}>
+            <b className="w-full text-sm">Add daily spend (manual)</b>
+            <label className="text-xs">Date<input className={`${input} block`} type="date" value={spend.date} onChange={e => setSpend({ ...spend, date: e.target.value })} /></label>
+            <label className="text-xs">Spend<input required className={`${input} block`} type="number" value={spend.spend} onChange={e => setSpend({ ...spend, spend: e.target.value })} /></label>
+            <label className="text-xs">Impressions (optional)<input className={`${input} block`} type="number" value={spend.impressions} onChange={e => setSpend({ ...spend, impressions: e.target.value })} /></label>
+            <label className="text-xs">Clicks (optional)<input className={`${input} block`} type="number" value={spend.clicks} onChange={e => setSpend({ ...spend, clicks: e.target.value })} /></label>
+            <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white">Save spend</button>
+          </form>
+        )}
+
+        <div className="mt-3 max-h-44 overflow-y-auto">
+          <table className="w-full text-left text-xs">
+            <thead><tr className="border-b text-slate-500"><th className="p-1">Date</th><th className="p-1">Spend</th><th className="p-1">Impr.</th><th className="p-1">Clicks</th><th className="p-1">Conv.</th><th className="p-1">Source</th><th className="p-1"></th></tr></thead>
+            <tbody>
+              {(campaign.spend_records ?? []).map((r: any) => (
+                <tr key={r.id} className="border-b last:border-0">
+                  <td className="p-1">{String(r.date).slice(0, 10)}</td><td className="p-1">{fmtMoney(Number(r.spend), campaign.currency)}</td>
+                  <td className="p-1">{fmtNum(r.impressions)}</td><td className="p-1">{fmtNum(r.clicks)}</td><td className="p-1">{fmtNum(r.conversions)}</td>
+                  <td className="p-1">{r.source}</td>
+                  <td className="p-1">{can('campaigns.spend') && <button className="text-red-600" onClick={async () => { try { await campaignDeleteSpend(orgId, campaign.id, r.id); refresh(); } catch (e: any) { setError(e.message); } }}>✕</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {can('campaigns.edit') && (
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg bg-slate-50 p-3">
+              <b className="text-sm">Ad groups / ad sets</b>
+              {(campaign.ad_groups ?? []).map((g: any) => <div key={g.id} className="text-sm">{g.name} <span className="text-xs text-slate-400">{g.external_id ?? ''}</span></div>)}
+              <div className="mt-2 flex gap-2">
+                <input className={input} placeholder="New ad group name" value={groupName} onChange={e => setGroupName(e.target.value)} />
+                <button className="rounded bg-slate-900 px-2 py-1 text-xs text-white" onClick={async () => { if (!groupName) return; try { await campaignAddGroup(orgId, campaign.id, { name: groupName }); setGroupName(''); refresh(); } catch (e: any) { setError(e.message); } }}>Add</button>
+              </div>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <b className="text-sm">Ads / creatives</b>
+              {(campaign.ads ?? []).map((a: any) => <div key={a.id} className="text-sm">{a.name} <span className="text-xs text-slate-400">{a.creative_reference ?? ''}</span></div>)}
+              <div className="mt-2 flex gap-2">
+                <input className={input} placeholder="New ad name" value={adName} onChange={e => setAdName(e.target.value)} />
+                <button className="rounded bg-slate-900 px-2 py-1 text-xs text-white" onClick={async () => { if (!adName) return; try { await campaignAddAd(orgId, campaign.id, { name: adName }); setAdName(''); refresh(); } catch (e: any) { setError(e.message); } }}>Add</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {can('campaigns.edit') && (
+          <div className="mt-3 flex gap-2 text-sm">
+            <select className={input} value={campaign.status} onChange={async e => { try { await campaignUpdate(orgId, campaign.id, { status: e.target.value }); refresh(); } catch (err: any) { setError(err.message); } }}>
+              <option value="draft">draft</option><option value="active">active</option><option value="paused">paused</option><option value="completed">completed</option>
+            </select>
+            {can('campaigns.delete') && <button className="rounded border border-red-300 px-3 py-1.5 text-red-700" onClick={async () => { if (window.confirm('Delete this campaign and its spend records?')) { try { await campaignDelete(orgId, campaign.id); onClose(); } catch (e: any) { setError(e.message); } } }}>Delete campaign</button>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsView({ orgId, orgType, can, setError }: { orgId: number; orgType: string; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [range, setRange] = useState('last30');
+  const [overview, setOverview] = useState<any>(null);
+  const [agency, setAgency] = useState<any>(null);
+  const qs = range === 'last30' ? '' : `?range=${range}`;
+  const load = () => {
+    analyticsOverview(orgId, qs).then(setOverview).catch(e => setError(e.message));
+    if (orgType === 'agency') analyticsAgency(orgId, qs).then(setAgency).catch(() => setAgency(null));
+  };
+  useEffect(() => { load(); }, [orgId, range]);
+
+  const reports: [string, string][] = [['leads', 'Leads'], ['campaign-performance', 'Campaign performance'], ['funnel', 'Funnel'], ['agent-performance', 'Agent performance'], ['publishing-history', 'Publishing history']];
+  return (
+    <div>
+      <h2 className="text-2xl font-bold">Analytics</h2>
+      <div className="mt-3 flex gap-2 text-sm">
+        {[['last30', 'Last 30 days'], ['today', 'Today'], ['week', 'This week'], ['month', 'This month']].map(([r, label]) => (
+          <button key={r} onClick={() => setRange(r)} className={`rounded px-3 py-1.5 ${range === r ? 'bg-slate-900 text-white' : 'bg-white shadow-sm'}`}>{label}</button>
+        ))}
+        <span className="ml-2 self-center text-xs text-slate-400">{overview ? `${overview.range.from} → ${overview.range.to}` : ''}</span>
+      </div>
+
+      {overview && (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[['Leads received', overview.leads_received], ['Qualified', `${overview.qualified_leads} (${overview.qualified_rate_percent ?? '—'}%)`],
+              ['Converted', `${overview.won_leads} (${overview.conversion_rate_percent ?? '—'}%)`], ['Campaign spend', fmtMoney(overview.campaign_spend)],
+              ['Cost per lead', fmtMoney(overview.cost_per_lead)], ['Posts published', overview.posts_published],
+              ['Posts failed', overview.posts_failed], ['Follow-ups overdue', overview.follow_ups_overdue],
+            ].map(([k, v]) => (
+              <div key={k as string} className="rounded-xl bg-white p-4 shadow-sm"><div className="text-2xl font-bold">{v as any}</div><div className="text-xs text-slate-500">{k}</div></div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl bg-white p-4 shadow-sm">
+              <h3 className="font-semibold">Conversion funnel</h3>
+              <div className="mt-2 flex flex-col gap-1">
+                {overview.funnel.map((f: any, i: number) => {
+                  const max = Math.max(1, ...overview.funnel.map((x: any) => x.count));
+                  return (
+                    <div key={f.slug} className="flex items-center gap-2 text-sm">
+                      <span className="w-36 text-xs">{i + 1}. {f.stage}</span>
+                      <span className="h-4 rounded bg-emerald-500" style={{ width: `${Math.max(2, (f.count / max) * 100)}%` }} />
+                      <b>{f.count}</b>
+                    </div>
+                  );
+                })}
+              </div>
+              <h3 className="mt-4 font-semibold">Leads by source</h3>
+              {overview.leads_by_source.map((s: any) => <div key={s.source} className="flex justify-between text-sm"><span>{s.source}</span><b>{s.count}</b></div>)}
+              <h3 className="mt-4 font-semibold">Leads by city</h3>
+              {overview.leads_by_city.map((s: any) => <div key={s.city} className="flex justify-between text-sm"><span>{s.city}</span><b>{s.count}</b></div>)}
+            </div>
+            <div className="flex flex-col gap-4">
+              <div className="rounded-xl bg-white p-4 shadow-sm">
+                <h3 className="font-semibold">Campaign performance</h3>
+                {overview.leads_by_campaign.length === 0 && <p className="text-sm text-slate-400">No campaign activity in this range.</p>}
+                {overview.leads_by_campaign.map((c: any) => (
+                  <div key={c.campaign_id} className="mt-1 flex flex-wrap justify-between gap-2 border-b py-1 text-sm last:border-0">
+                    <span>{c.name}</span>
+                    <span className="text-xs text-slate-500">Spend {fmtMoney(c.spend)} · Leads {c.leads} · CPL {fmtMoney(c.cost_per_lead)} · Conv {c.conversion_rate_percent ?? '—'}%</span>
+                  </div>
+                ))}
+                <h3 className="mt-4 font-semibold">Agent performance</h3>
+                {overview.agent_performance.map((a: any) => <div key={a.agent} className="flex justify-between text-sm"><span>{a.agent}</span><span className="text-xs text-slate-500">{a.leads} leads · {a.won} won</span></div>)}
+                <h3 className="mt-4 font-semibold">Social accounts</h3>
+                {overview.social_account_health.map((s: any) => <div key={s.status} className="flex justify-between text-sm"><span>{s.status}</span><b>{s.count}</b></div>)}
+                <p className="mt-1 text-[11px] text-slate-400">Post engagement metrics: {overview.social_engagement === null ? 'not provided by the platform yet (shown as missing, not zero)' : ''}</p>
+              </div>
+              {can('analytics.export') && (
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <h3 className="font-semibold">Export reports</h3>
+                  <p className="text-[11px] text-slate-400">Exports use the selected range and are recorded in the audit log.</p>
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {reports.map(([report, label]) => (
+                      <div key={report} className="flex items-center gap-2 text-sm">
+                        <span className="w-44">{label}</span>
+                        {['csv', 'xlsx', 'pdf'].map(f => (
+                          <button key={f} className="rounded border px-2 py-0.5 text-xs uppercase" onClick={async () => { try { await analyticsExportDownload(orgId, report, f, qs); } catch (e: any) { setError(e.message); } }}>{f}</button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {agency && (
+        <div className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+          <h3 className="font-semibold">Agency overview — all clients</h3>
+          <div className="mt-1 text-sm text-slate-500">{agency.total_clients} clients ({agency.active_clients} active) · {agency.connected_social_accounts} connected social accounts · {agency.totals.leads} leads · {agency.totals.qualified} qualified · spend {fmtMoney(agency.totals.spend)} · CPL {fmtMoney(agency.totals.cost_per_lead)}</div>
+          <table className="mt-2 w-full text-left text-sm">
+            <thead><tr className="border-b text-xs text-slate-500"><th className="p-1">Client</th><th className="p-1">Leads</th><th className="p-1">Qualified</th><th className="p-1">Spend</th><th className="p-1">CPL</th><th className="p-1">Posts</th><th className="p-1">Overdue follow-ups</th></tr></thead>
+            <tbody>{agency.clients.map((c: any) => (
+              <tr key={c.client} className="border-b last:border-0"><td className="p-1 font-medium">{c.client}</td><td className="p-1">{c.leads}</td><td className="p-1">{c.qualified}</td><td className="p-1">{fmtMoney(c.spend)}</td><td className="p-1">{fmtMoney(c.cost_per_lead)}</td><td className="p-1">{c.posts_published}</td><td className="p-1">{c.follow_ups_overdue}</td></tr>
+            ))}</tbody>
+          </table>
+          <h4 className="mt-3 text-sm font-semibold">Team workload (open tasks)</h4>
+          {agency.team_workload.map((w: any) => <div key={w.member} className="flex justify-between text-sm"><span>{w.member}</span><b>{w.open_tasks}</b></div>)}
+        </div>
+      )}
     </div>
   );
 }

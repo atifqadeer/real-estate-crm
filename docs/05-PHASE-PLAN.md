@@ -29,6 +29,16 @@ Delivered: see docs/08. 10 Phase 3 tests green. Live publishing still
 needs the Phase 2 externals (Meta app credentials + Advanced Access)
 and publicly reachable media URLs.
 
+## Phase 6 — Campaigns & Analytics — ✅ DONE 2026-11-12 (code + mocked-API tests)
+Campaign module (ad groups/ads, daily spend manual + Meta Ads insights
+sync with ads_read, idempotent) · attribution (manual/Meta-id/UTM,
+distinct-lead counting, method mix) · CPL/CPQL/conversion metrics ·
+campaign comparison · budget-threshold notifications · client +
+agency analytics · CSV/XLSX/PDF report exports with audit logging ·
+missing provider metrics shown as null, never zero. See docs/11.
+10 Phase 6 tests green. Live sync needs ads_read (+ Full Access for
+client ad accounts).
+
 ## Phase 5 — CRM Pipeline & WhatsApp — ✅ DONE 2026-11-12 (code + mocked-API tests)
 Kanban pipeline with drag-and-drop stage moves · saved filter views ·
 tasks · in-app notifications with per-user preferences (lead assigned,

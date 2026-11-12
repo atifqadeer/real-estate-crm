@@ -90,6 +90,10 @@ class LeadController extends Controller
             $this->assignment->manualAssign($lead, $agent, $request->user());
             unset($data['assigned_to']);
         }
+        if (!empty($data['campaign_id'])) {
+            \App\Models\Campaign::where('organization_id', $organization->id)->findOrFail($data['campaign_id']);
+            $data['attribution_method'] = $lead->attribution_method ?? 'manual';
+        }
         if ($data) $lead->update($data);
         return response()->json(['data' => $lead->fresh()->load(['source:id,name,key', 'stage:id,name,slug', 'assignee:id,name'])]);
     }
@@ -166,7 +170,9 @@ class LeadController extends Controller
 
     private function validated(Request $request, bool $partial = false): array
     {
+        // Manual campaign association (Phase 6 attribution).
         $rules = [
+            'campaign_id' => ['nullable', 'integer'],
             'full_name' => [$partial ? 'sometimes' : 'required', 'string', 'max:160'],
             'phone' => ['nullable', 'string', 'max:32'],
             'phone_e164' => ['nullable', 'string', 'max:32'],

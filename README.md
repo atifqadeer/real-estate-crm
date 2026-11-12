@@ -5,7 +5,17 @@ serving real estate agencies, brokers and developers in Pakistan.
 Built phase by phase from the complete project prompt
 (`Real_Estate_Marketing_Agency_CRM_Complete_Prompt.txt`, 2026-11-12).
 
-**Current status: Phase 5 — CRM Pipeline & WhatsApp COMPLETE in code (2026-11-12)**
+**Current status: Phase 6 — Campaigns & Analytics COMPLETE in code (2026-11-12)**
+Campaign management (ad groups/ads, daily spend by manual entry or
+Meta Ads insights sync), lead attribution by manual link / Meta
+campaign ID / UTM with distinct-lead counting, CPL, cost per qualified
+lead and conversion metrics, campaign comparison, budget-threshold
+notifications, client and agency analytics dashboards, and audited
+CSV/XLSX/PDF report exports — with unsupplied provider metrics shown as
+missing, never zero. 61 tests green (Graph API faked; live ad sync
+needs the ads_read permission — see `docs/11-PHASE6-CAMPAIGNS-ANALYTICS.md`).
+
+**Phase 5 — CRM Pipeline & WhatsApp COMPLETE in code (2026-11-12)**
 Kanban pipeline board with drag-and-drop stage moves, saved filter
 views, tasks, an in-app notification center with per-user preferences
 (lead assignment, follow-up due/overdue, content outcomes, social

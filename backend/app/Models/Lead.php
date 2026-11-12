@@ -20,6 +20,7 @@ class Lead extends Model
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'landing_page',
         'assigned_to', 'lead_pipeline_stage_id', 'priority', 'consent_marketing', 'consent_whatsapp',
         'notes', 'custom_fields', 'possible_duplicate_of', 'last_contacted_at', 'next_follow_up_at',
+        'campaign_id', 'attribution_method',
     ];
 
     protected function casts(): array
@@ -43,4 +44,5 @@ class Lead extends Model
     public function activities(): HasMany { return $this->hasMany(LeadActivity::class); }
     public function followUps(): HasMany { return $this->hasMany(LeadFollowUp::class); }
     public function possibleDuplicateOf(): BelongsTo { return $this->belongsTo(Lead::class, 'possible_duplicate_of'); }
+    public function campaign(): BelongsTo { return $this->belongsTo(Campaign::class); }
 }

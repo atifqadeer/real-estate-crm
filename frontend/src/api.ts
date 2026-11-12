@@ -181,6 +181,48 @@ export const leadRuleCreate = (orgId: number, payload: any) => api<any>(`/organi
 export const leadRuleDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-rules/${id}`, orgId, { method: 'DELETE' });
 export const socialSubscribeLeads = (orgId: number, accountId: number) =>
   api<any>(`/organizations/${orgId}/social/accounts/${accountId}/subscribe-leads`, orgId, { method: 'POST' });
+// --- Phase 6: campaigns & analytics ---
+export interface CampaignMetrics {
+  spend: number; currency: string; impressions: number | null; reach: number | null; clicks: number | null;
+  conversions_reported: number | null; leads: number; qualified_leads: number; won_leads: number;
+  cost_per_lead: number | null; cost_per_qualified_lead: number | null; conversion_rate_percent: number | null;
+  budget: number | null; budget_used_percent: number | null; attribution_methods: Record<string, number>;
+}
+export interface CampaignT {
+  id: number; name: string; objective: string | null; platform: string; external_campaign_id: string | null;
+  meta_ad_account_id: string | null; start_date: string | null; end_date: string | null; budget: string | null;
+  currency: string; status: string; target_location: string | null; property_category: string | null;
+  landing_page_url: string | null; tracking_params: Record<string, string> | null;
+  owner?: { id: number; name: string } | null; metrics?: CampaignMetrics;
+  ad_groups?: any[]; ads?: any[]; spend_records?: any[];
+}
+export const campaignList = (orgId: number) => api<CampaignT[]>(`/organizations/${orgId}/campaigns`, orgId);
+export const campaignGet = (orgId: number, id: number) => api<CampaignT & { metrics: CampaignMetrics }>(`/organizations/${orgId}/campaigns/${id}`, orgId);
+export const campaignCreate = (orgId: number, payload: any) => api<CampaignT>(`/organizations/${orgId}/campaigns`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const campaignUpdate = (orgId: number, id: number, payload: any) => api<CampaignT>(`/organizations/${orgId}/campaigns/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
+export const campaignDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/campaigns/${id}`, orgId, { method: 'DELETE' });
+export const campaignAddSpend = (orgId: number, id: number, payload: any) => api<any>(`/organizations/${orgId}/campaigns/${id}/spend`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const campaignDeleteSpend = (orgId: number, id: number, recordId: number) => api<any>(`/organizations/${orgId}/campaigns/${id}/spend/${recordId}`, orgId, { method: 'DELETE' });
+export const campaignAddGroup = (orgId: number, id: number, payload: any) => api<any>(`/organizations/${orgId}/campaigns/${id}/ad-groups`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const campaignAddAd = (orgId: number, id: number, payload: any) => api<any>(`/organizations/${orgId}/campaigns/${id}/ads`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const campaignCompare = (orgId: number, ids: number[]) => api<{ campaign: { id: number; name: string; status: string }; metrics: CampaignMetrics }[]>(`/organizations/${orgId}/campaigns/compare?ids=${ids.join(',')}`, orgId);
+export const campaignSyncMeta = (orgId: number, payload: any) => api<{ campaigns: number; spend_rows: number }>(`/organizations/${orgId}/campaigns/sync-meta`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const analyticsOverview = (orgId: number, qs = '') => api<any>(`/organizations/${orgId}/analytics/overview${qs}`, orgId);
+export const analyticsAgency = (orgId: number, qs = '') => api<any>(`/organizations/${orgId}/analytics/agency${qs}`, orgId);
+export async function analyticsExportDownload(orgId: number, report: string, format: string, qs = ''): Promise<void> {
+  const res = await fetch(`${API}/organizations/${orgId}/analytics/export/${report}?format=${format}${qs ? '&' + qs.replace(/^\?/, '') : ''}`, {
+    headers: { Authorization: `Bearer ${token()}`, 'X-Organization-Id': String(orgId), Accept: '*/*' },
+  });
+  if (!res.ok) throw new Error(`Export failed (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${report}.${format}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // --- Phase 5: pipeline, filters, tasks, notifications, WhatsApp ---
 export interface PipelineColumn { stage: LeadStage; count: number; leads: any[] }
 export const pipelineBoard = (orgId: number, mine = false) => api<PipelineColumn[]>(`/organizations/${orgId}/pipeline${mine ? '?assigned_to=me' : ''}`, orgId);

@@ -22,6 +22,7 @@ class NotificationService
         'content.published', 'content.failed',
         'social.disconnected', 'social.token_expired',
         'whatsapp.message', 'task.assigned',
+        'campaign.budget_threshold',
     ];
 
     public function notify(Organization $organization, User|iterable $users, string $type, string $title, ?string $body = null, array $data = []): void
