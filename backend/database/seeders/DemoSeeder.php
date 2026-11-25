@@ -45,5 +45,10 @@ class DemoSeeder extends Seeder
         $roles->assign($clientA, $multi, 'client_sales_agent');
         $clientB->users()->syncWithoutDetaching([$multi->id => ['status' => 'active', 'joined_at' => now()]]);
         $roles->assign($clientB, $multi, 'client_admin');
+
+        // Sample leads / campaign / posts for Client A only, so the modules
+        // can be exercised locally without real Meta/WhatsApp accounts.
+        // Skips itself if Client A already has leads (never overwrites real data).
+        $this->call(DemoModuleDataSeeder::class);
     }
 }
