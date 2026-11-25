@@ -11,6 +11,7 @@ import {
   followUpList, followUpCreate, followUpComplete, leadRules, leadRuleCreate, leadRuleDelete,
   leadImportUpload, socialSubscribeLeads,
   leadCampaignPresets, leadCampaignList, leadCampaignCreate, leadCampaignUpdate, leadCampaignDelete, leadCampaignRegenWebhook,
+  platformSettings, platformSettingsSave,
   pipelineBoard, leadMove, savedFilters, savedFilterCreate, savedFilterDelete,
   taskList, taskCreate, taskUpdate, taskDelete,
   notificationList, notificationReadAll, notificationRead, notificationPreferences, notificationPreferencesUpdate,
@@ -26,13 +27,13 @@ import {
   type Lead, type LeadStage, type LeadSourceT, type LeadFormT, type FollowUp,
   type PipelineColumn, type SavedFilter, type LeadTaskT, type AppNotification,
   type WhatsAppAccountT, type WhatsAppTemplateT, type WhatsAppConversationT,
-  type CampaignT, type CampaignMetrics, type LeadCampaignT, type LeadCampaignPresets,
+  type CampaignT, type CampaignMetrics, type LeadCampaignT, type LeadCampaignPresets, type PlatformSettingsData,
 } from './api';
 
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
-type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'lead-campaigns' | 'whatsapp' | 'campaigns' | 'analytics' | 'billing' | 'members' | 'settings' | 'audit';
+type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'lead-campaigns' | 'whatsapp' | 'campaigns' | 'analytics' | 'billing' | 'members' | 'settings' | 'platform-settings' | 'audit';
 
-const NAV: { id: View; label: string; permission: string }[] = [
+const NAV: { id: View; label: string; permission: string; agencyOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
   { id: 'clients', label: 'Clients / Organizations', permission: 'organizations.view' },
   { id: 'social', label: 'Connected Accounts', permission: 'social.view' },
@@ -45,6 +46,7 @@ const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'billing', label: 'Billing & Packages', permission: 'billing.view' },
   { id: 'members', label: 'Users and Roles', permission: 'members.view' },
   { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
+  { id: 'platform-settings', label: 'Platform Settings', permission: 'settings.view', agencyOnly: true },
   { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
 ];
 
@@ -102,7 +104,7 @@ export default function App() {
           </select>
         </label>
         <nav className="flex flex-col gap-1">
-          {NAV.filter(n => can(n.permission)).map(n => (
+          {NAV.filter(n => can(n.permission) && (!n.agencyOnly || user?.is_agency_staff)).map(n => (
             <button key={n.id} onClick={() => setView(n.id)}
               className={`rounded px-3 py-2 text-left text-sm ${view === n.id ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800'}`}>
               {n.label}
@@ -134,6 +136,7 @@ export default function App() {
           onCreated={() => me().then(setUser)} />}
         {membership && view === 'members' && <MembersView orgId={membership.organization_id} canInvite={can('members.invite')} setError={setError} />}
         {membership && view === 'settings' && <SettingsView orgId={membership.organization_id} canUpdate={can('settings.update')} setError={setError} />}
+        {view === 'platform-settings' && <PlatformSettingsView setError={setError} />}
         {membership && view === 'audit' && <AuditView orgId={membership.organization_id} setError={setError} />}
       </main>
     </div>
@@ -226,6 +229,90 @@ function MembersView({ orgId, canInvite, setError }: { orgId: number; canInvite:
           <button className="rounded bg-emerald-600 px-4 text-white">Invite</button>
         </form>
       )}
+    </div>
+  );
+}
+
+function PlatformSettingsView({ setError }: { setError: (s: string) => void }) {
+  const [data, setData] = useState<PlatformSettingsData | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState('');
+  const load = () => platformSettings().then(d => { setData(d); const v: Record<string, string> = {}; d.groups.forEach(g => g.fields.forEach(f => { v[f.key] = f.secret ? '' : (f.value ?? ''); })); setValues(v); }).catch(e => setError(e.message));
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!data) return;
+    const payload: Record<string, string | null> = {};
+    data.groups.forEach(g => g.fields.forEach(f => {
+      if (f.secret) { if (values[f.key]) payload[f.key] = values[f.key]; } // blank secret = keep existing
+      else payload[f.key] = values[f.key] === '' ? null : values[f.key];
+    }));
+    try { await platformSettingsSave(payload); await load(); setSaved('Saved — values are stored encrypted in the database and override the server .env.'); }
+    catch (e: any) { setError(e.message); }
+  };
+
+  if (!data) return <p className="text-sm text-slate-500">Loading platform settings…</p>;
+  const urlLabels: Record<string, string> = {
+    meta_oauth_callback: 'Meta — Valid OAuth Redirect URI (paste into Facebook Login settings)',
+    meta_webhook: 'Meta — Webhook Callback URL (paste into the Meta app Webhooks config, subscribe to the Page "leadgen" field)',
+    linkedin_oauth_callback: 'LinkedIn — Authorized Redirect URL',
+    whatsapp_webhook: 'WhatsApp — Webhook Callback URL',
+  };
+  return (
+    <div>
+      <h2 className="text-2xl font-bold">Platform Settings</h2>
+      <p className="mt-2 max-w-3xl text-sm text-slate-600">
+        The app credentials this platform uses to connect Meta, LinkedIn and the AI assistant. Saved values are stored
+        <strong> encrypted in the database</strong> and override the server <code>.env</code>. Secrets are never shown back —
+        leave a secret blank to keep the current one. Only agency staff can see this page. Each client still connects
+        their own Pages afterwards from Connected Accounts — nobody's Facebook password is ever entered here.
+      </p>
+      {saved && <div className="mt-3 rounded bg-emerald-100 p-3 text-sm text-emerald-900">{saved}</div>}
+
+      {data.groups.map(g => (
+        <div key={g.key} className="mt-4 rounded border bg-white p-4">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">{g.label}</h3>
+            <span className={`rounded px-2 py-0.5 text-xs ${g.configured ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{g.configured ? 'Configured' : 'Incomplete'}</span>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {g.fields.map(f => (
+              <label key={f.key} className="block text-sm">{f.label}
+                {f.is_set
+                  ? <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{f.source === 'database' ? 'from database' : 'from .env'}</span>
+                  : <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-600">missing</span>}
+                <input type={f.secret ? 'password' : 'text'} autoComplete="off"
+                  className="mt-1 w-full rounded border p-2"
+                  placeholder={f.secret ? (f.is_set ? '•••••••• (saved — leave blank to keep)' : 'Not set') : ''}
+                  value={values[f.key] ?? ''} onChange={e => setValues({ ...values, [f.key]: e.target.value })} />
+                <span className="mt-0.5 block text-xs text-slate-400">{f.help}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="mt-4 rounded border bg-white p-4">
+        <h3 className="font-semibold">URLs to paste into the provider dashboards</h3>
+        <div className="mt-2 space-y-2">
+          {Object.entries(data.urls).map(([k, u]) => (
+            <div key={k}>
+              <div className="text-xs font-medium text-slate-600">{urlLabels[k] ?? k}</div>
+              <div className="mt-0.5 flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-slate-50 p-2 text-xs">{u}</code>
+                <button className="text-xs text-indigo-600" onClick={() => navigator.clipboard?.writeText(u)}>Copy</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          For Lead Ads to actually arrive, the Meta app also needs Business Verification + App Review approval for the
+          <code> leads_retrieval </code> permission, each Page must be connected and subscribed to leadgen, and the
+          queue worker must be running on the server.
+        </p>
+      </div>
+
+      <button className="mt-4 rounded bg-indigo-600 px-5 py-2 text-sm font-medium text-white" onClick={save}>Save platform settings</button>
     </div>
   );
 }

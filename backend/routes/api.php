@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\LeadAssignmentRuleController;
 use App\Http\Controllers\Api\V1\LeadCatalogController;
 use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\LeadFollowUpController;
+use App\Http\Controllers\Api\V1\AdminPlatformSettingsController;
 use App\Http\Controllers\Api\V1\LeadCampaignController;
 use App\Http\Controllers\Api\V1\LeadFormController;
 use App\Http\Controllers\Api\V1\LeadImportController;
@@ -53,6 +54,9 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
+        // Platform Settings (agency staff only): Meta/LinkedIn/AI app credentials in the DB.
+        Route::get('/admin/platform-settings', [AdminPlatformSettingsController::class, 'show']);
+        Route::put('/admin/platform-settings', [AdminPlatformSettingsController::class, 'update']);
         Route::get('/organizations', [OrganizationController::class, 'index']);
         Route::post('/organizations', [OrganizationController::class, 'store']);
 

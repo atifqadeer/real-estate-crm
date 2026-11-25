@@ -9,7 +9,7 @@ export interface Membership {
   permissions: string[];
 }
 
-export interface Me { id: number; name: string; email: string; memberships: Membership[] }
+export interface Me { id: number; name: string; email: string; is_agency_staff?: boolean; memberships: Membership[] }
 
 const token = () => localStorage.getItem('crm_token');
 export const setToken = (t: string | null) => t ? localStorage.setItem('crm_token', t) : localStorage.removeItem('crm_token');
@@ -182,6 +182,18 @@ export const leadRuleCreate = (orgId: number, payload: any) => api<any>(`/organi
 export const leadRuleDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-rules/${id}`, orgId, { method: 'DELETE' });
 export const socialSubscribeLeads = (orgId: number, accountId: number) =>
   api<any>(`/organizations/${orgId}/social/accounts/${accountId}/subscribe-leads`, orgId, { method: 'POST' });
+// --- Platform settings (agency staff): Meta/LinkedIn/AI credentials stored in the DB ---
+export interface PlatformSettingField {
+  key: string; label: string; secret: boolean; help: string;
+  is_set: boolean; source: 'database' | 'env' | null; value: string | null;
+}
+export interface PlatformSettingsData {
+  groups: { key: string; label: string; configured: boolean; fields: PlatformSettingField[] }[];
+  urls: Record<string, string>;
+}
+export const platformSettings = () => api<PlatformSettingsData>('/admin/platform-settings');
+export const platformSettingsSave = (values: Record<string, string | null>) =>
+  api<PlatformSettingsData & { message: string }>('/admin/platform-settings', undefined, { method: 'PUT', body: JSON.stringify({ values }) });
 // --- Phase 8: lead campaigns (vertical + keyword lead capture profiles) ---
 export interface LeadCampaignT {
   id: number; name: string; vertical: string; vertical_custom?: string | null; vertical_label: string;
