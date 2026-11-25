@@ -3,12 +3,17 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\Campaign;
+use App\Models\ContentPost;
+use App\Models\ContentPostTarget;
 use App\Models\InAppNotification;
 use App\Models\Lead;
 use App\Models\Organization;
+use App\Models\SocialAccount;
 use App\Models\SocialOauthIdentity;
+use App\Models\SocialPlatform;
 use App\Models\User;
 use App\Services\RoleProvisioner;
+use App\Support\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -248,6 +253,46 @@ class CampaignsAnalyticsTest extends TestCase
         $funnelTotal = collect($res->json('data.funnel'))->sum('count');
         $this->assertSame(3, $funnelTotal);
         $this->assertNull($res->json('data.social_engagement')); // not provided, not zero
+    }
+
+    public function test_client_analytics_counts_published_targets_via_post_org(): void
+    {
+        // Regression: content_post_targets has no organization_id column;
+        // the overview must scope targets through their parent post.
+        // (Filtering the targets table directly errors on MySQL and
+        // silently matched nothing on SQLite.)
+        $h = $this->auth($this->adminA, $this->clientA);
+        TenantContext::set($this->clientA);
+        $account = SocialAccount::create([
+            'organization_id' => $this->clientA->id, 'social_platform_id' => SocialPlatform::where('key', 'facebook')->value('id'),
+            'external_id' => 'page-reg-1', 'display_name' => 'Reg Page', 'status' => 'connected', 'connected_by' => $this->adminA->id,
+        ]);
+        $post = ContentPost::create([
+            'organization_id' => $this->clientA->id, 'author_id' => $this->adminA->id,
+            'title' => 'Reg post', 'base_caption' => 'x', 'status' => 'published',
+        ]);
+        ContentPostTarget::create([
+            'content_post_id' => $post->id, 'social_account_id' => $account->id, 'platform' => 'facebook',
+            'status' => 'published', 'published_at' => now(), 'idempotency_key' => 'reg-pub-1',
+        ]);
+        $account2 = SocialAccount::create([
+            'organization_id' => $this->clientA->id, 'social_platform_id' => SocialPlatform::where('key', 'instagram')->value('id'),
+            'external_id' => 'ig-reg-1', 'display_name' => 'Reg IG', 'status' => 'connected', 'connected_by' => $this->adminA->id,
+        ]);
+        ContentPostTarget::create([
+            'content_post_id' => $post->id, 'social_account_id' => $account2->id, 'platform' => 'instagram',
+            'status' => 'failed', 'idempotency_key' => 'reg-fail-1',
+        ]);
+
+        $res = $this->getJson("/api/v1/organizations/{$this->clientA->id}/analytics/overview", $h);
+        $res->assertOk();
+        $this->assertSame(1, $res->json('data.posts_published'));
+        $this->assertSame(1, $res->json('data.posts_failed'));
+
+        // The publishing-history export uses the same scoping.
+        $export = $this->get("/api/v1/organizations/{$this->clientA->id}/analytics/export/publishing-history?format=csv", $h);
+        $export->assertOk();
+        $this->assertStringContainsString('Reg post', $export->getContent());
     }
 
     public function test_agency_overview_aggregates_clients(): void

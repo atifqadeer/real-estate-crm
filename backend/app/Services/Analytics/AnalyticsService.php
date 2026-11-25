@@ -81,10 +81,16 @@ class AnalyticsService
         $spend = (float) CampaignSpendRecord::withoutTenantScope()->where('organization_id', $org->id)
             ->whereDate('date', '>=', $from->toDateString())->whereDate('date', '<=', $to->toDateString())->sum('spend');
 
-        $published = ContentPostTarget::where('organization_id', $org->id)->where('status', 'published')
-            ->whereBetween('published_at', [$from, $to])->count();
-        $failed = ContentPostTarget::where('organization_id', $org->id)->where('status', 'failed')
-            ->whereBetween('updated_at', [$from, $to])->count();
+        // content_post_targets has no organization_id column — the org
+        // lives on the parent post, so scope through a join. (Filtering
+        // the targets table directly errors on MySQL and silently
+        // matches nothing on SQLite.)
+        $targetsInOrg = fn () => ContentPostTarget::join('content_posts', 'content_posts.id', '=', 'content_post_targets.content_post_id')
+            ->where('content_posts.organization_id', $org->id);
+        $published = $targetsInOrg()->where('content_post_targets.status', 'published')
+            ->whereBetween('content_post_targets.published_at', [$from, $to])->count();
+        $failed = $targetsInOrg()->where('content_post_targets.status', 'failed')
+            ->whereBetween('content_post_targets.updated_at', [$from, $to])->count();
         $scheduled = ContentPost::withoutTenantScope()->where('organization_id', $org->id)->where('status', 'scheduled')->count();
 
         return [
@@ -198,8 +204,10 @@ class AnalyticsService
             'agent-performance' => ['Agent performance', ['Agent', 'Leads', 'Won'],
                 collect($overview['agent_performance'])->map(fn ($a) => [$a['agent'], $a['leads'], $a['won']])->all()],
             'publishing-history' => ['Social publishing history', ['Post', 'Platform', 'Account', 'Status', 'Published at', 'Link'],
-                ContentPostTarget::where('organization_id', $org->id)->whereBetween('created_at', [$from, $to])
-                    ->with(['post', 'account'])->latest()->get()
+                ContentPostTarget::join('content_posts', 'content_posts.id', '=', 'content_post_targets.content_post_id')
+                    ->where('content_posts.organization_id', $org->id)->whereBetween('content_post_targets.created_at', [$from, $to])
+                    ->select('content_post_targets.*')
+                    ->with(['post', 'account'])->orderByDesc('content_post_targets.created_at')->get()
                     ->map(fn ($t) => [$t->post?->title ?? 'Untitled', $t->platform, $t->account?->display_name, $t->status, $t->published_at?->toDateTimeString(), $t->platform_url])->all()],
             default => throw new \InvalidArgumentException("Unknown report: {$report}"),
         };
