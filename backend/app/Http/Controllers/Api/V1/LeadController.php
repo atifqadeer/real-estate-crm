@@ -26,7 +26,8 @@ class LeadController extends Controller
         abort_unless($request->user()->can('leads.view'), 403);
         $this->catalog->ensureDefaults($organization);
         $leads = Lead::where('organization_id', $organization->id)
-            ->with(['source:id,name,key', 'stage:id,name,slug', 'assignee:id,name'])
+            ->with(['source:id,name,key', 'stage:id,name,slug', 'assignee:id,name', 'leadCampaign:id,name,vertical'])
+            ->when($request->query('lead_campaign_id'), fn ($q, $v) => $q->where('lead_campaign_id', $v))
             ->when($request->query('stage_id'), fn ($q, $v) => $q->where('lead_pipeline_stage_id', $v))
             ->when($request->query('source_id'), fn ($q, $v) => $q->where('lead_source_id', $v))
             ->when($request->query('assigned_to') === 'me', fn ($q) => $q->where('assigned_to', $request->user()->id))

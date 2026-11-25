@@ -25,6 +25,7 @@ class LeadIngestionService
     public function __construct(
         private LeadCatalogService $catalog,
         private LeadAssignmentService $assignment,
+        private LeadCampaignMatcher $campaigns,
     ) {}
 
     /**
@@ -34,6 +35,13 @@ class LeadIngestionService
     {
         $this->catalog->ensureDefaults($organization);
         $source = $this->catalog->sourceByKey($organization, $sourceKey);
+
+        // Phase 8: tag to a Lead Campaign — explicit (webhook URL) wins,
+        // otherwise the first active campaign whose keywords/sources match.
+        if (empty($data['lead_campaign_id'])) {
+            $campaign = $this->campaigns->match($organization, $data, $sourceKey);
+            if ($campaign) $data['lead_campaign_id'] = $campaign->id;
+        }
 
         $data['phone_e164'] = PhoneNormalizer::normalize($data['phone_e164'] ?? $data['phone'] ?? null);
         $data['whatsapp_e164'] = PhoneNormalizer::normalize($data['whatsapp_e164'] ?? $data['whatsapp'] ?? null);
@@ -59,6 +67,7 @@ class LeadIngestionService
                 $this->recordTouchpoint($organization, $match, $source->id, $data, $rawPayload);
                 // Fill blanks on the original; never overwrite known facts.
                 $fill = array_filter([
+                    'lead_campaign_id' => $match->lead_campaign_id ?: ($data['lead_campaign_id'] ?? null),
                     'city' => $match->city ?: ($data['city'] ?? null),
                     'area' => $match->area ?: ($data['area'] ?? null),
                     'property_type' => $match->property_type ?: ($data['property_type'] ?? null),
@@ -135,6 +144,7 @@ class LeadIngestionService
                     'meta_page_id', 'meta_campaign_id', 'meta_ad_id', 'meta_adgroup_id', 'ad_name',
                     'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'landing_page',
                     'priority', 'consent_marketing', 'consent_whatsapp', 'notes', 'custom_fields',
+                    'lead_campaign_id',
                 ])),
                 [
                     'organization_id' => $organization->id,

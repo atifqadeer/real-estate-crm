@@ -10,6 +10,7 @@ import {
   leadMySummary, leadBackfill, leadForms, leadFormCreate, leadFormUpdate, leadFormDelete,
   followUpList, followUpCreate, followUpComplete, leadRules, leadRuleCreate, leadRuleDelete,
   leadImportUpload, socialSubscribeLeads,
+  leadCampaignPresets, leadCampaignList, leadCampaignCreate, leadCampaignUpdate, leadCampaignDelete, leadCampaignRegenWebhook,
   pipelineBoard, leadMove, savedFilters, savedFilterCreate, savedFilterDelete,
   taskList, taskCreate, taskUpdate, taskDelete,
   notificationList, notificationReadAll, notificationRead, notificationPreferences, notificationPreferencesUpdate,
@@ -25,11 +26,11 @@ import {
   type Lead, type LeadStage, type LeadSourceT, type LeadFormT, type FollowUp,
   type PipelineColumn, type SavedFilter, type LeadTaskT, type AppNotification,
   type WhatsAppAccountT, type WhatsAppTemplateT, type WhatsAppConversationT,
-  type CampaignT, type CampaignMetrics,
+  type CampaignT, type CampaignMetrics, type LeadCampaignT, type LeadCampaignPresets,
 } from './api';
 
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
-type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'whatsapp' | 'campaigns' | 'analytics' | 'billing' | 'members' | 'settings' | 'audit';
+type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'lead-campaigns' | 'whatsapp' | 'campaigns' | 'analytics' | 'billing' | 'members' | 'settings' | 'audit';
 
 const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
@@ -37,6 +38,7 @@ const NAV: { id: View; label: string; permission: string }[] = [
   { id: 'social', label: 'Connected Accounts', permission: 'social.view' },
   { id: 'content', label: 'Content & Publishing', permission: 'content.view' },
   { id: 'leads', label: 'Leads', permission: 'leads.view' },
+  { id: 'lead-campaigns', label: 'Lead Campaigns', permission: 'leads.view' },
   { id: 'whatsapp', label: 'WhatsApp Inbox', permission: 'whatsapp.view' },
   { id: 'campaigns', label: 'Campaigns', permission: 'campaigns.view' },
   { id: 'analytics', label: 'Analytics', permission: 'analytics.view' },
@@ -122,6 +124,7 @@ export default function App() {
           canConnect={can('social.connect')} canTest={can('social.test')} canDisconnect={can('social.disconnect')} setError={setError} />}
         {membership && view === 'content' && <ContentView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'leads' && <LeadsView orgId={membership.organization_id} can={can} setError={setError} />}
+        {membership && view === 'lead-campaigns' && <LeadCampaignsView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'whatsapp' && <WhatsAppView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'campaigns' && <CampaignsView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'analytics' && <AnalyticsView orgId={membership.organization_id} orgType={membership.type} can={can} setError={setError} />}
@@ -731,6 +734,145 @@ function TemplatesTab({ orgId, can, setError, onApply }: {
 
 // ---------------- Phase 4: Lead Generation ----------------
 
+function LeadCampaignsView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+  const [campaigns, setCampaigns] = useState<LeadCampaignT[]>([]);
+  const [presets, setPresets] = useState<LeadCampaignPresets | null>(null);
+  const [editing, setEditing] = useState<LeadCampaignT | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', vertical: 'real_estate', vertical_custom: '', keywords: '', locations: '', sources: [] as string[], description: '', is_active: true });
+  const canConfigure = can('leads.configure');
+
+  const load = () => { leadCampaignList(orgId).then(setCampaigns).catch(e => setError(e.message)); };
+  useEffect(() => { load(); leadCampaignPresets(orgId).then(setPresets).catch(e => setError(e.message)); }, [orgId]);
+
+  const split = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
+  const startCreate = () => {
+    setEditing(null);
+    const preset = presets?.verticals.find(v => v.key === 'real_estate');
+    setForm({ name: '', vertical: 'real_estate', vertical_custom: '', keywords: preset ? preset.keywords.join(', ') : '', locations: '', sources: [], description: '', is_active: true });
+    setShowForm(true);
+  };
+  const startEdit = (c: LeadCampaignT) => {
+    setEditing(c);
+    setForm({ name: c.name, vertical: c.vertical, vertical_custom: c.vertical_custom ?? '', keywords: (c.keywords ?? []).join(', '), locations: (c.locations ?? []).join(', '), sources: c.sources ?? [], description: c.description ?? '', is_active: c.is_active });
+    setShowForm(true);
+  };
+  const pickVertical = (key: string) => {
+    setForm(f => ({ ...f, vertical: key, keywords: !editing ? (presets?.verticals.find(v => v.key === key)?.keywords.join(', ') ?? f.keywords) : f.keywords }));
+  };
+  const toggleSource = (key: string) => setForm(f => ({ ...f, sources: f.sources.includes(key) ? f.sources.filter(s => s !== key) : [...f.sources, key] }));
+  const submit = async () => {
+    const payload = { name: form.name, vertical: form.vertical, vertical_custom: form.vertical === 'custom' ? form.vertical_custom : null, keywords: split(form.keywords), locations: split(form.locations), sources: form.sources, description: form.description || null, is_active: form.is_active };
+    try {
+      if (editing) await leadCampaignUpdate(orgId, editing.id, payload); else await leadCampaignCreate(orgId, payload);
+      setShowForm(false); setEditing(null); load();
+    } catch (e: any) { setError(e.message); }
+  };
+  const sourceLabel = (key: string) => presets?.sources.find(s => s.key === key)?.label ?? key;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Lead Campaigns</h2>
+        {canConfigure && <button className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white" onClick={startCreate}>+ New lead campaign</button>}
+      </div>
+      <p className="mt-2 max-w-3xl text-sm text-slate-600">
+        Set up a campaign for your business — pick an industry (or create a custom one), add the keywords your customers
+        use, and choose where leads come from. Every new lead from your connected channels is checked against your active
+        campaigns and tagged automatically. Capture works on channels you own: Meta Lead Ads, your website forms,
+        WhatsApp, imports, and this campaign's webhook (for Google Ads Lead Forms, Zapier, Make or your own site).
+        Social platforms do not allow scraping public posts by keyword, so capture is from your own accounts and forms.
+      </p>
+
+      {showForm && canConfigure && (
+        <div className="mt-4 rounded border bg-white p-4">
+          <h3 className="font-semibold">{editing ? 'Edit lead campaign' : 'New lead campaign'}</h3>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="text-sm">Campaign name
+              <input className="mt-1 w-full rounded border p-2" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. DHA Plots — Lahore" />
+            </label>
+            <label className="text-sm">Industry / vertical
+              <select className="mt-1 w-full rounded border p-2" value={form.vertical} onChange={e => pickVertical(e.target.value)}>
+                {(presets?.verticals ?? []).map(v => <option key={v.key} value={v.key}>{v.label}</option>)}
+              </select>
+            </label>
+            {form.vertical === 'custom' && (
+              <label className="text-sm">Your business type
+                <input className="mt-1 w-full rounded border p-2" value={form.vertical_custom} onChange={e => setForm({ ...form, vertical_custom: e.target.value })} placeholder="e.g. Solar panels, Travel agency…" />
+              </label>
+            )}
+            <label className="text-sm">Locations (comma separated, optional)
+              <input className="mt-1 w-full rounded border p-2" value={form.locations} onChange={e => setForm({ ...form, locations: e.target.value })} placeholder="Lahore, Karachi" />
+            </label>
+          </div>
+          <label className="mt-3 block text-sm">Keywords — an enquiry mentioning any of these is tagged to this campaign (comma separated)
+            <textarea className="mt-1 w-full rounded border p-2" rows={2} value={form.keywords} onChange={e => setForm({ ...form, keywords: e.target.value })} placeholder="plot, flat, booking…" />
+          </label>
+          <div className="mt-3 text-sm">Lead sources (none selected = all sources)
+            <div className="mt-1 flex flex-wrap gap-3">
+              {(presets?.sources ?? []).map(s => (
+                <label key={s.key} className="flex items-center gap-1 text-sm">
+                  <input type="checkbox" checked={form.sources.includes(s.key)} onChange={() => toggleSource(s.key)} /> {s.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="mt-3 block text-sm">Description (optional)
+            <input className="mt-1 w-full rounded border p-2" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+          </label>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} /> Active — capture leads now
+          </label>
+          <div className="mt-4 flex gap-2">
+            <button className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white" onClick={submit}>{editing ? 'Save changes' : 'Create campaign'}</button>
+            <button className="rounded border px-4 py-2 text-sm" onClick={() => { setShowForm(false); setEditing(null); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {campaigns.map(c => (
+          <div key={c.id} className="rounded border bg-white p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="font-semibold">{c.name}</div>
+                <div className="mt-1 flex gap-2 text-xs">
+                  <span className="rounded bg-indigo-100 px-2 py-0.5 text-indigo-800">{c.vertical_label}</span>
+                  <span className={`rounded px-2 py-0.5 ${c.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>{c.is_active ? 'Active' : 'Paused'}</span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">{c.leads_count} leads</span>
+                </div>
+              </div>
+              {canConfigure && (
+                <div className="flex gap-2 text-sm">
+                  <button className="text-indigo-600" onClick={() => startEdit(c)}>Edit</button>
+                  <button className="text-red-600" onClick={async () => { if (window.confirm('Delete this lead campaign? Leads already captured stay, unlinked.')) { try { await leadCampaignDelete(orgId, c.id); load(); } catch (e: any) { setError(e.message); } } }}>Delete</button>
+                </div>
+              )}
+            </div>
+            {(c.keywords ?? []).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {(c.keywords ?? []).slice(0, 10).map(k => <span key={k} className="rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-800">{k}</span>)}
+                {(c.keywords ?? []).length > 10 && <span className="text-xs text-slate-500">+{(c.keywords ?? []).length - 10} more</span>}
+              </div>
+            )}
+            {(c.sources ?? []).length > 0 && <div className="mt-2 text-xs text-slate-500">Sources: {(c.sources ?? []).map(sourceLabel).join(' · ')}</div>}
+            {(c.locations ?? []).length > 0 && <div className="mt-1 text-xs text-slate-500">Locations: {(c.locations ?? []).join(', ')}</div>}
+            <div className="mt-3 rounded bg-slate-50 p-2">
+              <div className="text-xs font-medium text-slate-600">Webhook URL — for Google Ads Lead Forms, Zapier, Make or your website. Keep it secret.</div>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="flex-1 truncate text-xs">{c.webhook_url}</code>
+                <button className="text-xs text-indigo-600" onClick={() => navigator.clipboard?.writeText(c.webhook_url)}>Copy</button>
+                {canConfigure && <button className="text-xs text-slate-500" onClick={async () => { if (window.confirm('Regenerate the webhook URL? The old URL stops working.')) { try { await leadCampaignRegenWebhook(orgId, c.id); load(); } catch (e: any) { setError(e.message); } } }}>Regenerate</button>}
+              </div>
+            </div>
+          </div>
+        ))}
+        {campaigns.length === 0 && <p className="text-sm text-slate-500">No lead campaigns yet. Create one to start tagging incoming leads by industry and keywords.</p>}
+      </div>
+    </div>
+  );
+}
+
 function LeadsView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
   const [tab, setTab] = useState<'leads' | 'pipeline' | 'my' | 'tasks' | 'import' | 'forms' | 'followups' | 'setup'>('leads');
   return (
@@ -778,7 +920,8 @@ function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string
     if (search) params.set('search', search);
     if (stageFilter) params.set('stage_id', stageFilter);
     if (onlyDup) params.set('possible_duplicates', '1');
-    leadList(orgId, `?${params.toString()}`).then(r => setLeads(r.data)).catch(e => setError(e.message));
+    // api() already unwraps the paginator's data array; accept both shapes.
+    leadList(orgId, `?${params.toString()}`).then(r => setLeads((r as any).data ?? r)).catch(e => setError(e.message));
   };
   useEffect(() => { load(); }, [orgId, stageFilter, onlyDup]);
   useEffect(() => { leadStages(orgId).then(setStages).catch(() => {}); leadSources(orgId).then(setSources).catch(() => {}); }, [orgId]);
@@ -844,7 +987,7 @@ function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string
                 <td className="p-2 font-medium">{l.full_name}{l.possible_duplicate_of && <span className="ml-1 rounded bg-orange-100 px-1 text-[10px] text-orange-800">possible duplicate</span>}</td>
                 <td className="p-2 text-xs">{l.phone_e164 ?? '—'}{l.email ? <div>{l.email}</div> : null}</td>
                 <td className="p-2 text-xs">{l.city ?? ''}{l.preferred_location ? ` · ${l.preferred_location}` : ''}{l.property_reference ? <div>{l.property_reference}</div> : null}</td>
-                <td className="p-2 text-xs">{l.source?.name ?? '—'}{l.campaign_name ? <div className="text-slate-400">{l.campaign_name}</div> : null}</td>
+                <td className="p-2 text-xs">{l.source?.name ?? '—'}{l.campaign_name ? <div className="text-slate-400">{l.campaign_name}</div> : null}{l.lead_campaign ? <div className="mt-0.5 inline-block rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] text-indigo-800">{l.lead_campaign.name}</div> : null}</td>
                 <td className="p-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{l.stage?.name ?? '—'}</span></td>
                 <td className="p-2 text-xs">{l.assignee?.name ?? <span className="text-slate-400">Unassigned</span>}</td>
                 <td className="p-2 text-xs text-slate-500">{new Date(l.created_at).toLocaleDateString()}</td>

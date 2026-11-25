@@ -19,6 +19,7 @@ class LeadSource extends Model
             ['key' => 'website_form', 'name' => 'Website form'],
             ['key' => 'meta_lead_ads', 'name' => 'Meta Lead Ads'],
             ['key' => 'whatsapp', 'name' => 'WhatsApp'],
+            ['key' => 'webhook', 'name' => 'Webhook / Google Ads'],
             ['key' => 'walk_in', 'name' => 'Walk-in / Office visit'],
             ['key' => 'referral', 'name' => 'Referral'],
         ];

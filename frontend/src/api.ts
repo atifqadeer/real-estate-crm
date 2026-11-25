@@ -150,6 +150,7 @@ export interface Lead {
   custom_fields: Record<string, string> | null; possible_duplicate_of: number | null;
   created_at: string; source?: { id: number; name: string; key: string } | null;
   stage?: { id: number; name: string; slug: string } | null; assignee?: { id: number; name: string } | null;
+  lead_campaign?: { id: number; name: string; vertical: string } | null; lead_campaign_id?: number | null;
   assigned_to: number | null; lead_pipeline_stage_id: number | null;
   touchpoints?: any[]; activities?: any[]; follow_ups?: any[];
   possible_duplicate_of_lead?: { id: number; full_name: string; phone_e164: string | null } | null;
@@ -181,6 +182,22 @@ export const leadRuleCreate = (orgId: number, payload: any) => api<any>(`/organi
 export const leadRuleDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-rules/${id}`, orgId, { method: 'DELETE' });
 export const socialSubscribeLeads = (orgId: number, accountId: number) =>
   api<any>(`/organizations/${orgId}/social/accounts/${accountId}/subscribe-leads`, orgId, { method: 'POST' });
+// --- Phase 8: lead campaigns (vertical + keyword lead capture profiles) ---
+export interface LeadCampaignT {
+  id: number; name: string; vertical: string; vertical_custom?: string | null; vertical_label: string;
+  keywords: string[] | null; locations: string[] | null; sources: string[] | null;
+  description?: string | null; is_active: boolean; webhook_key: string; webhook_url: string; leads_count: number;
+}
+export interface LeadCampaignPresets {
+  verticals: { key: string; label: string; keywords: string[] }[];
+  sources: { key: string; label: string }[];
+}
+export const leadCampaignPresets = (orgId: number) => api<LeadCampaignPresets>(`/organizations/${orgId}/lead-campaign-presets`, orgId);
+export const leadCampaignList = (orgId: number) => api<LeadCampaignT[]>(`/organizations/${orgId}/lead-campaigns`, orgId);
+export const leadCampaignCreate = (orgId: number, payload: any) => api<LeadCampaignT>(`/organizations/${orgId}/lead-campaigns`, orgId, { method: 'POST', body: JSON.stringify(payload) });
+export const leadCampaignUpdate = (orgId: number, id: number, payload: any) => api<LeadCampaignT>(`/organizations/${orgId}/lead-campaigns/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
+export const leadCampaignDelete = (orgId: number, id: number) => api<any>(`/organizations/${orgId}/lead-campaigns/${id}`, orgId, { method: 'DELETE' });
+export const leadCampaignRegenWebhook = (orgId: number, id: number) => api<LeadCampaignT>(`/organizations/${orgId}/lead-campaigns/${id}/regenerate-webhook`, orgId, { method: 'POST' });
 // --- Phase 6: campaigns & analytics ---
 export interface CampaignMetrics {
   spend: number; currency: string; impressions: number | null; reach: number | null; clicks: number | null;

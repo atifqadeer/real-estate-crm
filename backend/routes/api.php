@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\LeadAssignmentRuleController;
 use App\Http\Controllers\Api\V1\LeadCatalogController;
 use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\LeadFollowUpController;
+use App\Http\Controllers\Api\V1\LeadCampaignController;
 use App\Http\Controllers\Api\V1\LeadFormController;
 use App\Http\Controllers\Api\V1\LeadImportController;
 use App\Http\Controllers\Api\V1\MediaController;
@@ -42,6 +43,9 @@ Route::prefix('v1')->group(function () {
     // Public website lead forms (Phase 4): honeypot + per-IP throttle inside.
     Route::get('/public/forms/{publicKey}', [LeadFormController::class, 'publicShow']);
     Route::post('/public/forms/{publicKey}/submit', [LeadFormController::class, 'publicSubmit'])->middleware('throttle:30,1');
+    // Public lead-campaign webhook (Phase 8): Google Ads Lead Forms, Zapier/Make, custom sites.
+    // The unguessable per-campaign key in the URL is the credential.
+    Route::post('/public/lead-campaigns/{webhookKey}', [LeadCampaignController::class, 'publicWebhook'])->middleware('throttle:60,1');
     // WhatsApp Cloud API webhooks (Phase 5): same handshake + signature scheme.
     Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
     Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'receive']);
@@ -108,6 +112,13 @@ Route::prefix('v1')->group(function () {
             Route::delete('/organizations/{organization}/leads/{lead}', [LeadController::class, 'destroy']);
             Route::post('/organizations/{organization}/leads/{lead}/notes', [LeadController::class, 'addNote']);
             Route::post('/organizations/{organization}/leads/meta/backfill', [LeadController::class, 'metaBackfill']);
+            // Phase 8: lead campaigns (vertical + keyword lead capture profiles)
+            Route::get('/organizations/{organization}/lead-campaign-presets', [LeadCampaignController::class, 'presets']);
+            Route::get('/organizations/{organization}/lead-campaigns', [LeadCampaignController::class, 'index']);
+            Route::post('/organizations/{organization}/lead-campaigns', [LeadCampaignController::class, 'store']);
+            Route::put('/organizations/{organization}/lead-campaigns/{campaign}', [LeadCampaignController::class, 'update']);
+            Route::delete('/organizations/{organization}/lead-campaigns/{campaign}', [LeadCampaignController::class, 'destroy']);
+            Route::post('/organizations/{organization}/lead-campaigns/{campaign}/regenerate-webhook', [LeadCampaignController::class, 'regenerateWebhook']);
             Route::get('/organizations/{organization}/lead-stages', [LeadCatalogController::class, 'stages']);
             Route::post('/organizations/{organization}/lead-stages', [LeadCatalogController::class, 'storeStage']);
             Route::delete('/organizations/{organization}/lead-stages/{stage}', [LeadCatalogController::class, 'destroyStage']);
