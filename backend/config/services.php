@@ -35,33 +35,39 @@ return [
         ],
     ],
 
-    // Meta (Facebook Login) — Phase 2. Secrets live ONLY in .env / secret manager.
+    // Meta (Facebook Login). Credentials are NOT environment variables:
+    // they live only in the database (platform_settings table), managed
+    // by agency admins on the Platform Settings page and applied to this
+    // config at boot (AppServiceProvider). Only non-secret operational
+    // defaults remain here.
     'meta' => [
-        'app_id' => env('META_APP_ID'),
-        'app_secret' => env('META_APP_SECRET'),
-        'redirect' => env('META_REDIRECT_URI'),
-        'graph_version' => env('META_GRAPH_VERSION', 'v27.0'),
-        'scopes' => env('META_SCOPES', 'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,instagram_basic,instagram_content_publish,leads_retrieval'),
-        'webhook_verify_token' => env('META_WEBHOOK_VERIFY_TOKEN'),
+        'app_id' => null,
+        'app_secret' => null,
+        'redirect' => null,
+        'graph_version' => 'v27.0',
+        'scopes' => 'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,instagram_basic,instagram_content_publish,leads_retrieval',
+        'webhook_verify_token' => null,
         'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
     ],
 
-    // LinkedIn (Phase 7) — app must have the Community Management API
-    // product approved for organization posting.
+    // LinkedIn — same rule: credentials only in the database (Platform
+    // Settings). The app must have the Community Management API product
+    // approved for organization posting.
     'linkedin' => [
-        'client_id' => env('LINKEDIN_CLIENT_ID'),
-        'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
-        'redirect' => env('LINKEDIN_REDIRECT_URI'),
-        'version' => env('LINKEDIN_VERSION', '202605'),
-        'scopes' => env('LINKEDIN_SCOPES', 'openid profile w_member_social r_organization_social w_organization_social'),
+        'client_id' => null,
+        'client_secret' => null,
+        'redirect' => null,
+        'version' => '202605',
+        'scopes' => 'openid profile w_member_social r_organization_social w_organization_social',
         'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
     ],
 
-    // AI content assistant (Phase 7) — any OpenAI-compatible endpoint.
+    // AI content assistant (any OpenAI-compatible endpoint) — the API
+    // key lives only in the database (Platform Settings).
     'ai' => [
-        'key' => env('AI_API_KEY'),
-        'url' => env('AI_API_URL', 'https://api.openai.com/v1'),
-        'model' => env('AI_MODEL', 'gpt-4o-mini'),
+        'key' => null,
+        'url' => 'https://api.openai.com/v1',
+        'model' => 'gpt-4o-mini',
     ],
 
 ];

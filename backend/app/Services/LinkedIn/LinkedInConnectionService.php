@@ -24,7 +24,7 @@ class LinkedInConnectionService
     public function startAuthorization(Organization $organization, User $user): string
     {
         if (!$this->client->configured()) {
-            throw new LinkedInApiException('LinkedIn is not configured on this server. Set LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET and LINKEDIN_REDIRECT_URI in .env, and make sure the LinkedIn app has the Community Management API product approved (Development tier or higher).');
+            throw new LinkedInApiException('LinkedIn is not configured yet. An agency admin can add the Client ID, Client Secret and Redirect URI on the Platform Settings page (stored in the database, never in environment variables), and the LinkedIn app needs the Community Management API product approved (Development tier or higher).');
         }
         $state = Str::random(40);
         Cache::put("linkedin_oauth_state:{$state}", ['organization_id' => $organization->id, 'user_id' => $user->id], now()->addMinutes(15));

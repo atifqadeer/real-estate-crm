@@ -8,8 +8,9 @@ use Illuminate\Http\Request;
 /**
  * Platform Settings page API: the Meta / LinkedIn / AI app credentials
  * the whole platform runs on. Agency staff only. Values are saved to
- * the platform_settings table (secrets encrypted, never returned);
- * database values override .env. A blank secret field on save means
+ * the platform_settings table (secrets encrypted, never returned) —
+ * the database is the only place credentials exist; there are no
+ * environment variables for them. A blank secret field on save means
  * "keep the existing value"; send null to clear a value entirely.
  */
 class AdminPlatformSettingsController extends Controller

@@ -30,7 +30,7 @@ class AiContentService
     {
         if (!$this->configured()) {
             throw ValidationException::withMessages(['ai' =>
-                'AI assistant is not configured on this server. Set AI_API_KEY (and optionally AI_API_URL / AI_MODEL) in the server .env to enable it.']);
+                'AI assistant is not configured yet. An agency admin can add the API key on the Platform Settings page — credentials are stored in the database, never in environment variables.']);
         }
         $platform = $input['platform'] ?? 'facebook';
         $language = $input['language'] ?? 'en';

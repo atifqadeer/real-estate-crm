@@ -199,7 +199,7 @@ export const socialSubscribeLeads = (orgId: number, accountId: number) =>
 // --- Platform settings (agency staff): Meta/LinkedIn/AI credentials stored in the DB ---
 export interface PlatformSettingField {
   key: string; label: string; secret: boolean; help: string;
-  is_set: boolean; source: 'database' | 'env' | null; value: string | null;
+  is_set: boolean; source: 'database' | 'default' | null; value: string | null;
 }
 export interface PlatformSettingsData {
   groups: { key: string; label: string; configured: boolean; fields: PlatformSettingField[] }[];

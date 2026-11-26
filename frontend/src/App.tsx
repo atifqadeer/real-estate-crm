@@ -308,7 +308,7 @@ function PlatformSettingsView({ setError }: { setError: (s: string) => void }) {
       if (f.secret) { if (values[f.key]) payload[f.key] = values[f.key]; } // blank secret = keep existing
       else payload[f.key] = values[f.key] === '' ? null : values[f.key];
     }));
-    try { await platformSettingsSave(payload); await load(); setSaved('Saved — values are stored encrypted in the database and override the server .env.'); }
+    try { await platformSettingsSave(payload); await load(); setSaved('Saved — credentials are stored encrypted in the database, the only place they exist.'); }
     catch (e: any) { setError(e.message); }
   };
 
@@ -323,8 +323,8 @@ function PlatformSettingsView({ setError }: { setError: (s: string) => void }) {
     <div>
       <h2 className="text-2xl font-bold">Platform Settings</h2>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
-        The app credentials this platform uses to connect Meta, LinkedIn and the AI assistant. Saved values are stored
-        <strong> encrypted in the database</strong> and override the server <code>.env</code>. Secrets are never shown back —
+        The app credentials this platform uses to connect Meta, LinkedIn and the AI assistant. They exist
+        <strong> only in the database, stored encrypted</strong> — there are no environment variables for them. Secrets are never shown back —
         leave a secret blank to keep the current one. Only agency staff can see this page. Each client still connects
         their own Pages afterwards from Connected Accounts — nobody's Facebook password is ever entered here.
       </p>
@@ -340,7 +340,7 @@ function PlatformSettingsView({ setError }: { setError: (s: string) => void }) {
             {g.fields.map(f => (
               <label key={f.key} className="block text-sm">{f.label}
                 {f.is_set
-                  ? <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{f.source === 'database' ? 'from database' : 'from .env'}</span>
+                  ? <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{f.source === 'database' ? 'from database' : 'built-in default'}</span>
                   : <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-600">missing</span>}
                 <input type={f.secret ? 'password' : 'text'} autoComplete="off"
                   className="mt-1 w-full rounded border p-2"

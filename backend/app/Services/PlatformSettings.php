@@ -7,10 +7,12 @@ use Illuminate\Support\Facades\Crypt;
 /**
  * Platform-wide integration settings (Meta / LinkedIn / AI app
  * credentials), managed from the Platform Settings page and stored in
- * the platform_settings table. Database values override the .env /
- * config values; secrets are encrypted at rest and never returned by
- * the API. Applied to config at boot (AppServiceProvider) so every
- * existing consumer of config('services.*') picks them up.
+ * the platform_settings table. The database is the ONLY source for
+ * credentials — there are deliberately no environment variables for
+ * them. Secrets are encrypted at rest and never returned by the API.
+ * Applied to config at boot (AppServiceProvider) so every existing
+ * consumer of config('services.*') picks them up; config holds only
+ * non-secret operational defaults (API versions, scopes, endpoints).
  */
 class PlatformSettings
 {
@@ -94,7 +96,7 @@ class PlatformSettings
         if ($field && $value) config([$field['config'] => $value]);
     }
 
-    /** Override config('services.*') with database values (DB wins over .env). */
+    /** Apply database values to config('services.*') — the database is the only credential source. */
     public function applyToConfig(): void
     {
         foreach (self::definitions() as $group) {
@@ -119,8 +121,8 @@ class PlatformSettings
             $allSet = true;
             foreach ($group['fields'] as $key => $field) {
                 $dbValue = $this->get($key);
-                $envValue = config($field['config']);
-                $isSet = ($dbValue !== null && $dbValue !== '') || ($envValue !== null && $envValue !== '');
+                $defaultValue = config($field['config']); // non-secret operational default, if any
+                $isSet = ($dbValue !== null && $dbValue !== '') || ($defaultValue !== null && $defaultValue !== '');
                 if (!$isSet) $allSet = false;
                 $fields[] = [
                     'key' => $key,
@@ -128,8 +130,8 @@ class PlatformSettings
                     'secret' => $field['secret'],
                     'help' => $field['help'],
                     'is_set' => $isSet,
-                    'source' => ($dbValue !== null && $dbValue !== '') ? 'database' : ($isSet ? 'env' : null),
-                    'value' => $field['secret'] ? null : ($dbValue ?? $envValue),
+                    'source' => ($dbValue !== null && $dbValue !== '') ? 'database' : ($isSet ? 'default' : null),
+                    'value' => $field['secret'] ? null : ($dbValue ?? $defaultValue),
                 ];
             }
             $groups[] = ['key' => $groupKey, 'label' => $group['label'], 'configured' => $allSet, 'fields' => $fields];

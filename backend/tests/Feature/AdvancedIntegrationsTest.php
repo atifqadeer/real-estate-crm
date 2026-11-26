@@ -170,7 +170,7 @@ class AdvancedIntegrationsTest extends TestCase
             'property' => ['title' => '10 Marla House, DHA'],
         ], $this->auth($this->adminA, $this->clientA));
         $res->assertStatus(422);
-        $this->assertStringContainsString('AI_API_KEY', json_encode($res->json()));
+        $this->assertStringContainsString('Platform Settings', json_encode($res->json()));
     }
 
     public function test_ai_assistant_returns_review_marked_suggestions_with_guardrails(): void

@@ -19,15 +19,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Platform Settings page values (database) override .env for the
-        // Meta/LinkedIn/AI integrations. Guarded: during installs and
-        // migrations the table may not exist yet — .env values then apply.
+        // Platform Settings page values (database) are the ONLY source of
+        // Meta/LinkedIn/AI credentials — there are no env variables for
+        // them. Guarded: during installs and migrations the table may not
+        // exist yet — integrations then simply report "not configured".
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('platform_settings')) {
                 app(\App\Services\PlatformSettings::class)->applyToConfig();
             }
         } catch (\Throwable) {
-            // Database unavailable — keep env/config values.
+            // Database unavailable — integrations stay unconfigured.
         }
     }
 }
