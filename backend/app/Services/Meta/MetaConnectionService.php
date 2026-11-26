@@ -27,7 +27,7 @@ class MetaConnectionService
     public function startAuthorization(Organization $organization, User $user, bool $rerequest = false): string
     {
         if (!$this->graph->configured()) {
-            throw new MetaApiException('Meta app credentials are not configured on the server (META_APP_ID, META_APP_SECRET, META_REDIRECT_URI).');
+            throw new MetaApiException('Meta app credentials are not configured yet. An agency admin can add them on the Platform Settings page (App ID, App Secret and OAuth Redirect URI from your app at developers.facebook.com), or set META_APP_ID, META_APP_SECRET and META_REDIRECT_URI in the server .env file.');
         }
         $state = Str::random(48);
         Cache::put("meta_oauth_state:{$state}", [
