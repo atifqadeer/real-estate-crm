@@ -6,7 +6,7 @@ import {
   mediaList, mediaUpload, mediaDelete, postList, postGet, postCreate, postUpdate, postDelete,
   postDuplicate, postDestinations, postPreviews, postAction, postRetryTarget, postCalendar,
   templateList, templateCreate, templateDelete, templateSeed,
-  leadStages, leadStageCreate, leadSources, leadList, leadGet, leadCreate, leadUpdate, leadDelete, leadAddNote,
+  leadStages, leadStageCreate, leadSources, leadList, leadTotal, postTotal, leadGet, leadCreate, leadUpdate, leadDelete, leadAddNote,
   leadMySummary, leadBackfill, leadForms, leadFormCreate, leadFormUpdate, leadFormDelete,
   followUpList, followUpCreate, followUpComplete, leadRules, leadRuleCreate, leadRuleDelete,
   leadImportUpload, socialSubscribeLeads,
@@ -33,22 +33,23 @@ import {
 // Shell rule (prompt): only modules that exist are shown — no fake buttons.
 type View = 'dashboard' | 'clients' | 'social' | 'content' | 'leads' | 'lead-campaigns' | 'whatsapp' | 'campaigns' | 'analytics' | 'billing' | 'members' | 'settings' | 'platform-settings' | 'audit';
 
-const NAV: { id: View; label: string; permission: string; agencyOnly?: boolean }[] = [
-  { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view' },
-  { id: 'clients', label: 'Clients / Organizations', permission: 'organizations.view' },
-  { id: 'social', label: 'Connected Accounts', permission: 'social.view' },
-  { id: 'content', label: 'Content & Publishing', permission: 'content.view' },
-  { id: 'leads', label: 'Leads', permission: 'leads.view' },
-  { id: 'lead-campaigns', label: 'Lead Campaigns', permission: 'leads.view' },
-  { id: 'whatsapp', label: 'WhatsApp Inbox', permission: 'whatsapp.view' },
-  { id: 'campaigns', label: 'Campaigns', permission: 'campaigns.view' },
-  { id: 'analytics', label: 'Analytics', permission: 'analytics.view' },
-  { id: 'billing', label: 'Billing & Packages', permission: 'billing.view' },
-  { id: 'members', label: 'Users and Roles', permission: 'members.view' },
-  { id: 'settings', label: 'Organization Settings', permission: 'settings.view' },
-  { id: 'platform-settings', label: 'Platform Settings', permission: 'settings.view', agencyOnly: true },
-  { id: 'audit', label: 'Audit Logs', permission: 'audit.view' },
+const NAV: { id: View; label: string; permission: string; agencyOnly?: boolean; section: string }[] = [
+  { id: 'dashboard', label: 'Dashboard', permission: 'dashboard.view', section: 'Overview' },
+  { id: 'leads', label: 'Leads', permission: 'leads.view', section: 'Leads & Sales' },
+  { id: 'lead-campaigns', label: 'Lead Campaigns', permission: 'leads.view', section: 'Leads & Sales' },
+  { id: 'whatsapp', label: 'WhatsApp Inbox', permission: 'whatsapp.view', section: 'Leads & Sales' },
+  { id: 'social', label: 'Connected Accounts', permission: 'social.view', section: 'Marketing' },
+  { id: 'content', label: 'Content & Publishing', permission: 'content.view', section: 'Marketing' },
+  { id: 'campaigns', label: 'Campaigns', permission: 'campaigns.view', section: 'Marketing' },
+  { id: 'analytics', label: 'Analytics', permission: 'analytics.view', section: 'Marketing' },
+  { id: 'clients', label: 'Clients / Organizations', permission: 'organizations.view', section: 'Workspace' },
+  { id: 'members', label: 'Users and Roles', permission: 'members.view', section: 'Workspace' },
+  { id: 'billing', label: 'Billing & Packages', permission: 'billing.view', section: 'Workspace' },
+  { id: 'settings', label: 'Organization Settings', permission: 'settings.view', section: 'Settings' },
+  { id: 'platform-settings', label: 'Platform Settings', permission: 'settings.view', agencyOnly: true, section: 'Settings' },
+  { id: 'audit', label: 'Audit Logs', permission: 'audit.view', section: 'Settings' },
 ];
+const NAV_SECTIONS = ['Overview', 'Leads & Sales', 'Marketing', 'Workspace', 'Settings'];
 
 export default function App() {
   const [user, setUser] = useState<Me | null>(null);
@@ -104,12 +105,21 @@ export default function App() {
           </select>
         </label>
         <nav className="flex flex-col gap-1">
-          {NAV.filter(n => can(n.permission) && (!n.agencyOnly || user?.is_agency_staff)).map(n => (
-            <button key={n.id} onClick={() => setView(n.id)}
-              className={`rounded px-3 py-2 text-left text-sm ${view === n.id ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800'}`}>
-              {n.label}
-            </button>
-          ))}
+          {NAV_SECTIONS.map(section => {
+            const items = NAV.filter(n => n.section === section && can(n.permission) && (!n.agencyOnly || user?.is_agency_staff));
+            if (items.length === 0) return null;
+            return (
+              <div key={section} className="mt-2 first:mt-0">
+                <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{section}</div>
+                {items.map(n => (
+                  <button key={n.id} onClick={() => setView(n.id)}
+                    className={`block w-full rounded px-3 py-2 text-left text-sm ${view === n.id ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800'}`}>
+                    {n.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         {membership && <NotificationBell orgId={membership.organization_id} setError={setError} />}
         <div className="mt-auto text-xs text-slate-400">
@@ -121,11 +131,11 @@ export default function App() {
       <main className="flex-1 p-6">
         {error && <div className="mb-4 rounded bg-red-100 p-3 text-sm text-red-800">{error}</div>}
         {notice && <div className="mb-4 rounded bg-emerald-100 p-3 text-sm text-emerald-900">{notice}</div>}
-        {membership && view === 'dashboard' && <DashboardView orgId={membership.organization_id} setError={setError} />}
+        {membership && view === 'dashboard' && <DashboardView orgId={membership.organization_id} setError={setError} go={setView} />}
         {membership && view === 'social' && <SocialView orgId={membership.organization_id}
           canConnect={can('social.connect')} canTest={can('social.test')} canDisconnect={can('social.disconnect')} setError={setError} />}
         {membership && view === 'content' && <ContentView orgId={membership.organization_id} can={can} setError={setError} />}
-        {membership && view === 'leads' && <LeadsView orgId={membership.organization_id} can={can} setError={setError} />}
+        {membership && view === 'leads' && <LeadsView orgId={membership.organization_id} can={can} setError={setError} go={setView} />}
         {membership && view === 'lead-campaigns' && <LeadCampaignsView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'whatsapp' && <WhatsAppView orgId={membership.organization_id} can={can} setError={setError} />}
         {membership && view === 'campaigns' && <CampaignsView orgId={membership.organization_id} can={can} setError={setError} />}
@@ -147,40 +157,91 @@ function Login({ onDone }: { onDone: (u: Me) => void }) {
   const [email, setEmail] = useState('admin@agency.demo');
   const [password, setPassword] = useState('password');
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100">
       <form className="w-96 rounded-xl bg-white p-6 shadow"
-        onSubmit={async e => { e.preventDefault(); try { const r = await login(email, password); setToken(r.token); onDone(r.user); } catch (ex: any) { setErr(ex.message); } }}>
+        onSubmit={async e => {
+          e.preventDefault(); setErr(''); setBusy(true);
+          try { const r = await login(email, password); setToken(r.token); onDone(r.user); }
+          catch (ex: any) {
+            setErr(/failed to fetch|networkerror|load failed/i.test(ex.message ?? '')
+              ? 'Cannot reach the server. Make sure the backend is running (php artisan serve in the backend folder) and try again.'
+              : ex.message);
+          } finally { setBusy(false); }
+        }}>
         <h1 className="text-xl font-bold">Agency CRM</h1>
         <p className="mb-4 text-sm text-slate-500">Sign in to your workspace</p>
         {err && <div className="mb-3 rounded bg-red-100 p-2 text-sm text-red-800">{err}</div>}
         <label className="block text-sm">Email<input className="mt-1 w-full rounded border p-2" value={email} onChange={e => setEmail(e.target.value)} /></label>
         <label className="mt-3 block text-sm">Password<input type="password" className="mt-1 w-full rounded border p-2" value={password} onChange={e => setPassword(e.target.value)} /></label>
-        <button className="mt-4 w-full rounded bg-emerald-600 py-2 text-white">Sign in</button>
+        <button disabled={busy} className="mt-4 w-full rounded bg-emerald-600 py-2 text-white disabled:opacity-60">{busy ? 'Signing in…' : 'Sign in'}</button>
         <p className="mt-3 text-xs text-slate-400">Demo seed accounts use password "password" (local development only).</p>
       </form>
     </div>
   );
 }
 
-function DashboardView({ orgId, setError }: { orgId: number; setError: (s: string) => void }) {
+function DashboardView({ orgId, setError, go }: { orgId: number; setError: (s: string) => void; go: (v: View) => void }) {
   const [d, setD] = useState<Dashboard | null>(null);
+  const [counts, setCounts] = useState<{ accounts: number; campaigns: number; posts: number; leads: number } | null>(null);
   useEffect(() => { dashboard(orgId).then(setD).catch(e => setError(e.message)); }, [orgId]);
+  useEffect(() => {
+    Promise.allSettled([socialAccounts(orgId), leadCampaignList(orgId), postTotal(orgId), leadTotal(orgId)])
+      .then(([a, c, p, l]) => setCounts({
+        accounts: a.status === 'fulfilled' && Array.isArray(a.value) ? a.value.length : 0,
+        campaigns: c.status === 'fulfilled' && Array.isArray(c.value) ? c.value.filter(x => x.is_active).length : 0,
+        posts: p.status === 'fulfilled' ? Number(p.value) || 0 : 0,
+        leads: l.status === 'fulfilled' ? Number(l.value) || 0 : 0,
+      }));
+  }, [orgId]);
   if (!d) return <p>Loading…</p>;
+
+  const steps = [
+    { done: (counts?.accounts ?? 0) > 0, title: 'Connect your Facebook Page', text: 'Link the Pages and Instagram accounts you post and advertise from.', cta: 'Connect accounts', view: 'social' as View },
+    { done: (counts?.campaigns ?? 0) > 0, title: 'Create a lead campaign', text: 'Pick your industry and keywords — matching leads from Meta, Google and your forms are tagged automatically.', cta: 'Create campaign', view: 'lead-campaigns' as View },
+    { done: (counts?.posts ?? 0) > 0, title: 'Publish your first post', text: 'Create and schedule content to your connected Pages.', cta: 'New post', view: 'content' as View },
+    { done: (counts?.leads ?? 0) > 0, title: 'Work your leads', text: 'Follow up, assign and move leads through your pipeline stages.', cta: 'Open leads', view: 'leads' as View },
+  ];
+  const showGuide = counts !== null && steps.some(s => !s.done);
+
   return (
     <div>
       <h2 className="text-2xl font-bold">{d.organization.business_name}</h2>
       <p className="text-sm text-slate-500">{d.organization.city ?? ''} · {d.organization.currency} · {d.organization.timezone}</p>
+
       <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <Card label="Total leads" value={counts?.leads ?? 0} />
+        <Card label="Connected accounts" value={counts?.accounts ?? 0} />
+        <Card label="Active lead campaigns" value={counts?.campaigns ?? 0} />
+        <Card label="Posts" value={counts?.posts ?? 0} />
         <Card label="Active members" value={d.members_count} />
         <Card label="Pending invitations" value={d.pending_invitations} />
       </div>
+
+      {showGuide && (
+        <div className="mt-6 rounded-xl bg-white p-5 shadow-sm">
+          <h3 className="font-semibold">Getting started — how leads flow through this CRM</h3>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {steps.map((s, i) => (
+              <div key={s.title} className={`flex items-start gap-3 rounded-lg border p-3 ${s.done ? 'border-emerald-200 bg-emerald-50' : ''}`}>
+                <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${s.done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>{s.done ? '✓' : i + 1}</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{s.title}</div>
+                  <p className="text-xs text-slate-500">{s.text}</p>
+                  {!s.done && <button className="mt-1.5 text-xs font-medium text-emerald-700 underline" onClick={() => go(s.view)}>{s.cta} →</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <h3 className="mt-6 font-semibold">Recent activity</h3>
-      <ul className="mt-2 divide-y rounded bg-white">
+      <ul className="mt-2 divide-y rounded-xl bg-white shadow-sm">
         {d.recent_activity.map((a, i) => <li key={i} className="p-3 text-sm">{a.action} — {a.user ?? 'system'} · {new Date(a.created_at).toLocaleString()}</li>)}
-        {d.recent_activity.length === 0 && <li className="p-3 text-sm text-slate-500">No activity yet.</li>}
+        {d.recent_activity.length === 0 && <li className="p-3 text-sm text-slate-500">No activity yet — connecting accounts and creating campaigns will show up here.</li>}
       </ul>
-      <p className="mt-4 text-xs text-slate-500">Leads, posts and campaign metrics appear here when Phases 2–6 ship. Nothing is simulated.</p>
     </div>
   );
 }
@@ -370,10 +431,14 @@ function SocialView({ orgId, canConnect, canTest, canDisconnect, setError }: {
   const [platforms, setPlatforms] = useState<SocialPlatform[]>([]);
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [busy, setBusy] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   const load = () => {
-    socialPlatforms(orgId).then(setPlatforms).catch(e => setError(e.message));
-    socialAccounts(orgId).then(setAccounts).catch(e => setError(e.message));
+    Promise.allSettled([socialPlatforms(orgId), socialAccounts(orgId)]).then(([p, a]) => {
+      if (p.status === 'fulfilled') setPlatforms(p.value); else setError(p.reason.message);
+      if (a.status === 'fulfilled') setAccounts(a.value); else setError(a.reason.message);
+      setLoaded(true);
+    });
   };
   useEffect(load, [orgId]);
 
@@ -390,6 +455,7 @@ function SocialView({ orgId, canConnect, canTest, canDisconnect, setError }: {
       <p className="text-sm text-slate-500">Social accounts belong to this workspace only. Tokens are stored encrypted on the server and never shown here.</p>
 
       <h3 className="mt-6 font-semibold">Platforms</h3>
+      {!loaded && <p className="mt-2 text-sm text-slate-400">Loading platforms…</p>}
       <div className="mt-2 grid gap-3 md:grid-cols-2">
         {platforms.map(p => (
           <div key={p.key} className="rounded-xl bg-white p-4 shadow-sm">
@@ -410,7 +476,7 @@ function SocialView({ orgId, canConnect, canTest, canDisconnect, setError }: {
       </div>
 
       <h3 className="mt-6 font-semibold">Accounts in this workspace</h3>
-      {accounts.length === 0 && <p className="mt-2 rounded bg-white p-4 text-sm text-slate-500">No accounts connected yet. Use “Connect with Facebook” above — Pages the person manages are discovered automatically, along with any linked Instagram professional accounts.</p>}
+      {loaded && accounts.length === 0 && <p className="mt-2 rounded bg-white p-4 text-sm text-slate-500">No accounts connected yet. Use “Connect with Facebook” above — Pages the person manages are discovered automatically, along with any linked Instagram professional accounts.</p>}
       <div className="mt-2 flex flex-col gap-3">
         {accounts.map(a => (
           <div key={a.id} className="rounded-xl bg-white p-4 shadow-sm">
@@ -510,7 +576,7 @@ function ContentView({ orgId, can, setError }: { orgId: number; can: (p: string)
 
       {tab === 'posts' && !composing && !editing && (
         <div className="mt-4 flex flex-col gap-3">
-          {posts.length === 0 && <p className="rounded bg-white p-4 text-sm text-slate-500">No posts yet in this workspace.</p>}
+          {posts.length === 0 && <p className="rounded bg-white p-4 text-sm text-slate-500">No posts yet in this workspace. <button className="font-medium text-emerald-700 underline" onClick={() => { setEditing(null); setComposing(true); }}>Create your first post</button> — it will be published to the Pages you connect in Connected Accounts.</p>}
           {posts.map(p => (
             <PostCard key={p.id} post={p} orgId={orgId} can={can} setError={setError} reload={load}
               onEdit={async () => { try { setEditing(await postGet(orgId, p.id)); } catch (e: any) { setError(e.message); } }} />
@@ -960,7 +1026,7 @@ function LeadCampaignsView({ orgId, can, setError }: { orgId: number; can: (p: s
   );
 }
 
-function LeadsView({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+function LeadsView({ orgId, can, setError, go }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void; go: (v: View) => void }) {
   const [tab, setTab] = useState<'leads' | 'pipeline' | 'my' | 'tasks' | 'import' | 'forms' | 'followups' | 'setup'>('leads');
   return (
     <div>
@@ -970,7 +1036,7 @@ function LeadsView({ orgId, can, setError }: { orgId: number; can: (p: string) =
           <button key={t} onClick={() => setTab(t)} className={`rounded px-3 py-1.5 ${tab === t ? 'bg-slate-900 text-white' : 'bg-white shadow-sm'}`}>{label}</button>
         ))}
       </div>
-      {tab === 'leads' && <LeadsListTab orgId={orgId} can={can} setError={setError} />}
+      {tab === 'leads' && <LeadsListTab orgId={orgId} can={can} setError={setError} go={go} onImport={() => setTab('import')} />}
       {tab === 'pipeline' && <PipelineTab orgId={orgId} can={can} setError={setError} />}
       {tab === 'tasks' && <TasksTab orgId={orgId} can={can} setError={setError} />}
       {tab === 'my' && <MyLeadsTab orgId={orgId} setError={setError} />}
@@ -982,8 +1048,9 @@ function LeadsView({ orgId, can, setError }: { orgId: number; can: (p: string) =
   );
 }
 
-function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void }) {
+function LeadsListTab({ orgId, can, setError, go, onImport }: { orgId: number; can: (p: string) => boolean; setError: (s: string) => void; go: (v: View) => void; onImport: () => void }) {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [stages, setStages] = useState<LeadStage[]>([]);
   const [sources, setSources] = useState<LeadSourceT[]>([]);
   const [search, setSearch] = useState('');
@@ -1008,7 +1075,7 @@ function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string
     if (stageFilter) params.set('stage_id', stageFilter);
     if (onlyDup) params.set('possible_duplicates', '1');
     // api() already unwraps the paginator's data array; accept both shapes.
-    leadList(orgId, `?${params.toString()}`).then(r => setLeads((r as any).data ?? r)).catch(e => setError(e.message));
+    leadList(orgId, `?${params.toString()}`).then(r => setLeads((r as any).data ?? r)).catch(e => setError(e.message)).finally(() => setLoaded(true));
   };
   useEffect(() => { load(); }, [orgId, stageFilter, onlyDup]);
   useEffect(() => { leadStages(orgId).then(setStages).catch(() => {}); leadSources(orgId).then(setSources).catch(() => {}); }, [orgId]);
@@ -1081,7 +1148,18 @@ function LeadsListTab({ orgId, can, setError }: { orgId: number; can: (p: string
                 <td className="p-2"><button className="text-xs text-blue-600 underline" onClick={async () => { try { setDetail(await leadGet(orgId, l.id)); } catch (e: any) { setError(e.message); } }}>Open</button></td>
               </tr>
             ))}
-            {leads.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-slate-400">No leads found.</td></tr>}
+            {loaded && leads.length === 0 && (search || stageFilter || onlyDup
+              ? <tr><td colSpan={8} className="p-4 text-center text-slate-400">No leads match this search or filter.</td></tr>
+              : <tr><td colSpan={8} className="p-6 text-center">
+                  <div className="font-medium text-slate-600">No leads yet — here's how they arrive</div>
+                  <p className="mx-auto mt-1 max-w-lg text-sm text-slate-400">Connect a Facebook Page and create a lead campaign, and new enquiries land here automatically, tagged to their campaign. You can also bring existing leads in:</p>
+                  <div className="mt-3 flex flex-wrap justify-center gap-2">
+                    <button className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white" onClick={() => go('lead-campaigns')}>Create a lead campaign</button>
+                    <button className="rounded border bg-white px-3 py-1.5 text-sm" onClick={onImport}>Import from CSV / Excel</button>
+                    <button className="rounded border bg-white px-3 py-1.5 text-sm" onClick={() => go('social')}>Connect Facebook</button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">…or add one manually with the form above.</p>
+                </td></tr>)}
           </tbody>
         </table>
       </div>

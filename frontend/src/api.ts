@@ -119,7 +119,7 @@ export async function mediaUpload(orgId: number, file: File): Promise<MediaAsset
   if (!res.ok) throw new Error(body?.error?.message ?? body?.message ?? `Upload failed (${res.status})`);
   return body.data as MediaAsset;
 }
-export const postList = (orgId: number) => api<{ data: ContentPost[] }>(`/organizations/${orgId}/content/posts?per_page=20`, orgId).then(r => r.data);
+export const postList = (orgId: number) => api<ContentPost[]>(`/organizations/${orgId}/content/posts?per_page=20`, orgId);
 export const postGet = (orgId: number, id: number) => api<ContentPost>(`/organizations/${orgId}/content/posts/${id}`, orgId);
 export const postCreate = (orgId: number, payload: any) => api<ContentPost>(`/organizations/${orgId}/content/posts`, orgId, { method: 'POST', body: JSON.stringify(payload) });
 export const postUpdate = (orgId: number, id: number, payload: any) => api<ContentPost>(`/organizations/${orgId}/content/posts/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
@@ -162,6 +162,20 @@ export const leadStages = (orgId: number) => api<LeadStage[]>(`/organizations/${
 export const leadStageCreate = (orgId: number, payload: any) => api<LeadStage>(`/organizations/${orgId}/lead-stages`, orgId, { method: 'POST', body: JSON.stringify(payload) });
 export const leadSources = (orgId: number) => api<LeadSourceT[]>(`/organizations/${orgId}/lead-sources`, orgId);
 export const leadList = (orgId: number, params = '') => api<{ data: Lead[]; total: number }>(`/organizations/${orgId}/leads${params}`, orgId);
+// Exact totals from the paginator body (api() unwraps data, which drops `total`).
+async function apiRaw(path: string, orgId?: number): Promise<any> {
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      'Content-Type': 'application/json', Accept: 'application/json',
+      ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+      ...(orgId ? { 'X-Organization-Id': String(orgId) } : {}),
+    },
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+}
+export const leadTotal = (orgId: number) => apiRaw(`/organizations/${orgId}/leads?per_page=1`, orgId).then(b => b.total ?? b.data?.length ?? 0);
+export const postTotal = (orgId: number) => apiRaw(`/organizations/${orgId}/content/posts?per_page=1`, orgId).then(b => b.total ?? b.data?.length ?? 0);
 export const leadGet = (orgId: number, id: number) => api<Lead>(`/organizations/${orgId}/leads/${id}`, orgId);
 export const leadCreate = (orgId: number, payload: any) => api<{ data: Lead; outcome: string }>(`/organizations/${orgId}/leads`, orgId, { method: 'POST', body: JSON.stringify(payload) });
 export const leadUpdate = (orgId: number, id: number, payload: any) => api<Lead>(`/organizations/${orgId}/leads/${id}`, orgId, { method: 'PUT', body: JSON.stringify(payload) });
